@@ -36,7 +36,6 @@ def main_menu():
 
     pygame.display.update()
 
-    # TODO: Add buttons for play/game settings/control settings/multiplayer?!
     clock = pygame.time.Clock()
 
     while True:
@@ -180,7 +179,7 @@ def game_loop():
                 ),
             )
             pygame.display.update()
-            # pygame.time.delay(3000)
+            pygame.time.delay(1500)
             break
 
         draw(player, elapsed_time, rocks_group, projectile_group)
