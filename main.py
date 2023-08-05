@@ -12,6 +12,7 @@ FRAME_RATE = 60
 
 PLAYER_WIDTH, PLAYER_HEIGHT = 60, 25
 PLAYER_VELOCITY = 5
+WEAPON_ATTACK_SPEED = 30
 
 WIN = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Friends on Fire!")
@@ -99,10 +100,12 @@ def game_loop():
     rocks_release_counter = 0
 
     hit = False
+    weapon_cooldown = 0
 
     while run:
         rocks_release_counter += clock.tick(FRAME_RATE)
         elapsed_time = time.time() - start_time
+        weapon_cooldown -= 1
 
         # generate rocks if the time is right
         if rocks_release_counter > rocks_add_increment:
@@ -148,11 +151,14 @@ def game_loop():
         ) and player.y + PLAYER_VELOCITY <= HEIGHT - PLAYER_HEIGHT:
             player.y += PLAYER_VELOCITY
         if keys[pygame.K_SPACE]:
-            projectile_group.add(
-                Projectile(
-                    "crimson", player.x + PLAYER_WIDTH, player.y + PLAYER_HEIGHT / 2
+            # only add projectile when timer allows it
+            if weapon_cooldown <= 0:
+                projectile_group.add(
+                    Projectile(
+                        "crimson", player.x + PLAYER_WIDTH, player.y + PLAYER_HEIGHT / 2
+                    )
                 )
-            )
+                weapon_cooldown = WEAPON_ATTACK_SPEED
 
         # check for collision with player
         for rock in rocks_group:
