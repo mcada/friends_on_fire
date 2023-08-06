@@ -104,6 +104,10 @@ class Game:
         self.title_screen = Title(self)
         self.state_stack.append(self.title_screen)
 
+    def reset_keys(self):
+        for action in self.actions:
+            self.actions[action] = False
+
 
 if __name__ == "__main__":
     game_instance = Game()

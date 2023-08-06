@@ -1,7 +1,6 @@
 import pygame, os
 from states.state import State
-
-# from states.pause_menu import PauseMenu
+from states.pause_menu import PauseMenu
 
 
 class Game_World(State):
@@ -14,9 +13,10 @@ class Game_World(State):
 
     def update(self, delta_time, actions):
         # Check if the game was paused
-        # if actions["start"]:
-        #     new_state = PauseMenu(self.game)
-        #     new_state.enter_state()
+        if actions["start"]:
+            new_state = PauseMenu(self.game)
+            new_state.enter_state()
+            self.game.reset_keys()
         self.player.update(delta_time, actions)
         pass
 

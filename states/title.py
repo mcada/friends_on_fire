@@ -10,7 +10,7 @@ class Title(State):
         if actions["start"]:
             new_state = Game_World(self.game)
             new_state.enter_state()
-        # self.game.reset_keys()
+        self.game.reset_keys()
         pass
 
     def render(self, display):
