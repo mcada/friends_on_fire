@@ -17,7 +17,7 @@ class Title(State):
         display.fill((255, 255, 255))
         self.game.draw_text(
             display,
-            "Game States Demo",
+            "Friends on fire!!!",
             (0, 0, 0),
             self.game.GAME_WIDTH / 2,
             self.game.GAME_HEIGHT / 2,

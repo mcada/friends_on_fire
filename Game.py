@@ -1,5 +1,6 @@
 import os, time, pygame
 from states.title import Title
+from objects.Player import Player
 
 
 class Game:
@@ -22,6 +23,7 @@ class Game:
         self.state_stack = []
         self.load_assets()
         self.load_states()
+        self.player = Player(self)
 
     def game_loop(self):
         while self.playing:
