@@ -1,5 +1,7 @@
 import pygame, os
 
+from states.pause_menu import PauseMenu
+
 
 class Projectile(pygame.sprite.Sprite):
     def __init__(self, color, x, y, game, width=15, height=15) -> None:
@@ -16,7 +18,10 @@ class Projectile(pygame.sprite.Sprite):
         self.rect.center = (x, y)
 
     def update(self):
-        self.rect.move_ip(7, 0)
+        # do not move projectile if game is paused
+        if isinstance(self.game.state_stack[-1], PauseMenu):
+            return
+        self.rect.move_ip(3, 0)
         # hardcoded, this needs to be taken from global variable somehow from main (add to constructor?)
         if self.rect.x > self.game.GAME_WIDTH:
             self.kill()

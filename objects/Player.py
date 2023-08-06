@@ -25,7 +25,8 @@ class Player:
         # Animate the sprite
         self.animate(delta_time, direction_x, direction_y)
         # Update weapon cooldown
-        self.weapon_cooldown -= delta_time
+        if self.weapon_cooldown > 0:
+            self.weapon_cooldown -= delta_time
 
         # Shoot
         if actions["space"]:
