@@ -2,8 +2,8 @@ import pygame
 import time
 import random
 
-from projectile import Projectile
-from rocks import Rock
+from Projectile import Projectile
+from Rocks import Rock
 
 pygame.font.init()
 
