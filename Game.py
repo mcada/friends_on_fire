@@ -18,11 +18,13 @@ class Game:
             "action1": False,
             "action2": False,
             "start": False,
+            "space": False,
         }
         self.delta_time, self.previous_time = 0, 0
         self.state_stack = []
         self.load_assets()
         self.load_states()
+        self.projectiles = pygame.sprite.Group()
         self.player = Player(self)
 
     def game_loop(self):
@@ -55,6 +57,8 @@ class Game:
                     self.actions["action2"] = True
                 if event.key == pygame.K_RETURN:
                     self.actions["start"] = True
+                if event.key == pygame.K_SPACE:
+                    self.actions["space"] = True
 
             if event.type == pygame.KEYUP:
                 if event.key == pygame.K_a:
@@ -71,12 +75,21 @@ class Game:
                     self.actions["action2"] = False
                 if event.key == pygame.K_RETURN:
                     self.actions["start"] = False
+                if event.key == pygame.K_SPACE:
+                    self.actions["space"] = False
 
     def update(self):
         self.state_stack[-1].update(self.delta_time, self.actions)
+        self.projectiles.update()
+        self.player.update(self.delta_time, self.actions)
 
     def render(self):
         self.state_stack[-1].render(self.game_canvas)
+
+        if len(self.state_stack) > 1:
+            self.projectiles.draw(self.game_canvas)
+            self.player.render(self.game_canvas)
+
         # Render current state to the screen
         self.screen.blit(
             self.game_canvas,

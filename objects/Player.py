@@ -1,5 +1,7 @@
 import pygame, os
 
+from objects.Projectile import Projectile
+
 PLAYER_WIDTH, PLAYER_HEIGHT = 80, 35
 
 
@@ -10,6 +12,8 @@ class Player:
         self.position_x, self.position_y = 100, self.game.GAME_HEIGHT / 2
         self.current_frame, self.last_frame_update = 0, 0
         self.player_speed = 200
+        self.attack_speed = 0.5
+        self.weapon_cooldown = 0
 
     def update(self, delta_time, actions):
         # Get the direction from inputs
@@ -20,6 +24,21 @@ class Player:
         self.position_y += self.player_speed * delta_time * direction_y
         # Animate the sprite
         self.animate(delta_time, direction_x, direction_y)
+        # Update weapon cooldown
+        self.weapon_cooldown -= delta_time
+
+        # Shoot
+        if actions["space"]:
+            if self.weapon_cooldown <= 0:
+                self.game.projectiles.add(
+                    Projectile(
+                        "crimson",
+                        self.position_x + PLAYER_WIDTH,
+                        self.position_y + PLAYER_HEIGHT / 2,
+                        self.game,
+                    )
+                )
+                self.weapon_cooldown = self.attack_speed
 
     def render(self, display):
         display.blit(self.curr_image, (self.position_x, self.position_y))
