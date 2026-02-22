@@ -78,6 +78,26 @@ def test_secondary_different_type_switches(game):
     assert isinstance(game.player.secondary, LaserCannon)
 
 
+def test_secondary_first_pickup_is_level_1(game):
+    gw = Game_World(game)
+    gw.game.state_stack.append(gw)
+    game.player.set_secondary(SpreadShot)
+    gw._apply_upgrade(_make_pickup(LaserCannon, game))
+    assert isinstance(game.player.secondary, LaserCannon)
+    assert game.player.secondary.level == 1
+
+
+def test_secondary_switch_back_levels_up(game):
+    gw = Game_World(game)
+    gw.game.state_stack.append(gw)
+    game.player.set_secondary(SpreadShot)
+    gw._apply_upgrade(_make_pickup(LaserCannon, game))
+    assert game.player.secondary.level == 1
+    gw._apply_upgrade(_make_pickup(SpreadShot, game))
+    assert isinstance(game.player.secondary, SpreadShot)
+    assert game.player.secondary.level == 2
+
+
 def test_secondary_level_remembered(game):
     gw = Game_World(game)
     gw.game.state_stack.append(gw)

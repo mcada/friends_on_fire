@@ -247,7 +247,7 @@ class Boss(pygame.sprite.Sprite):
             y = max(20, min(self.game.GAME_HEIGHT - 20, int(py + off)))
             self.boss_projectiles.add(
                 BossProjectile(
-                    cx - i * 40, y, -6 - i, 0, self.game,
+                    cx - i * 60, y, -3, 0, self.game,
                     destroyable=False, width=220, height=14,
                     color=(200, 0, 200),
                 )
@@ -260,7 +260,7 @@ class Boss(pygame.sprite.Sprite):
         base_angle = math.atan2(py - cy, px - cx)
         for spread in [-0.25, 0.25]:
             a = base_angle + spread
-            speed = 5
+            speed = 2.5
             self.boss_projectiles.add(
                 BossProjectile(
                     cx, cy, speed * math.cos(a), speed * math.sin(a),

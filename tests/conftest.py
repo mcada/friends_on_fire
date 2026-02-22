@@ -42,4 +42,6 @@ def actions():
         "space": False,
         "escape": False,
         "secondary": False,
+        "cycle_weapon": False,
+        "toggle_autofire": False,
     }

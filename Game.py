@@ -1,4 +1,4 @@
-import os, sys, json, random, pygame
+import os, sys, json, math, random, array as _array, pygame
 from states.title import Title
 from objects.Player import Player
 
@@ -26,6 +26,8 @@ class Game:
             "space": False,
             "escape": False,
             "secondary": False,
+            "cycle_weapon": False,
+            "toggle_autofire": False,
         }
         self.delta_time = 0
         self.state_stack = []
@@ -67,10 +69,13 @@ class Game:
                     self.actions["start"] = True
                 if event.key == pygame.K_SPACE:
                     self.actions["space"] = True
+                    self.actions["toggle_autofire"] = True
                 if event.key == pygame.K_ESCAPE:
                     self.actions["escape"] = True
                 if event.key in (pygame.K_LSHIFT, pygame.K_e):
                     self.actions["secondary"] = True
+                if event.key == pygame.K_q:
+                    self.actions["cycle_weapon"] = True
 
             if event.type == pygame.KEYUP:
                 if event.key in (pygame.K_a, pygame.K_LEFT):
@@ -164,7 +169,7 @@ class Game:
                 path = os.path.join(self.sound_dir, f"{prefix}_{i}.wav")
                 if os.path.exists(path):
                     target.append(pygame.mixer.Sound(path))
-        for weapon_prefix in ("spread", "laser"):
+        for weapon_prefix in ("spread", "laser", "missile"):
             group = []
             for i in range(1, 4):
                 path = os.path.join(self.sound_dir, f"{weapon_prefix}_{i}.wav")
@@ -172,11 +177,67 @@ class Game:
                     group.append(pygame.mixer.Sound(path))
             if group:
                 self.weapon_sounds[weapon_prefix] = group
+        self.weapon_sounds["spread"] = self._generate_swing_sounds()
         self.music_paths = {
             "menu": os.path.join(self.sound_dir, "menu_music.mp3"),
             "game": os.path.join(self.sound_dir, "game_music.ogg"),
             "boss": os.path.join(self.sound_dir, "boss_music.wav"),
         }
+
+    def _generate_swing_sounds(self):
+        """Generate 3 lightsaber-swing variations for the spread weapon."""
+        variants = [
+            (0.32, 190, 580, 150),
+            (0.28, 220, 680, 170),
+            (0.36, 160, 500, 130),
+        ]
+        sounds = []
+        for dur, base, peak, end in variants:
+            snd = self._synth_swing(dur, base, peak, end)
+            if snd:
+                sounds.append(snd)
+        return sounds or self.weapon_sounds.get("spread", [])
+
+    @staticmethod
+    def _synth_swing(duration, base_freq, peak_freq, end_freq):
+        mixer_init = pygame.mixer.get_init()
+        if not mixer_init:
+            return None
+        sample_rate, _, channels = mixer_init
+        num_samples = int(sample_rate * duration)
+        buf = _array.array('h')
+        phase = 0.0
+        for i in range(num_samples):
+            t = i / sample_rate
+            p = t / duration
+            if p < 0.22:
+                freq = base_freq + (peak_freq - base_freq) * (p / 0.22)
+            else:
+                freq = peak_freq - (peak_freq - end_freq) * ((p - 0.22) / 0.78)
+            phase += 2 * math.pi * freq / sample_rate
+            tone = (math.sin(phase) * 0.40
+                    + math.sin(phase * 2) * 0.18
+                    + math.sin(phase * 3) * 0.07
+                    + math.sin(phase * 5.02) * 0.04)
+            noise = (random.random() * 2 - 1) * 0.06
+            if p < 0.06:
+                env = p / 0.06
+            elif p > 0.65:
+                env = (1.0 - p) / 0.35
+            else:
+                env = 1.0
+            val = int(max(-1.0, min(1.0, (tone + noise) * env * 0.85)) * 32000)
+            for _ in range(channels):
+                buf.append(val)
+        return pygame.mixer.Sound(buffer=buf)
+
+    def play_boss_death_sound(self):
+        """Layer all explosion sounds at staggered volumes for an epic boom."""
+        for i, snd in enumerate(self.explosion_sounds):
+            ch = pygame.mixer.find_channel()
+            if ch:
+                ch.set_volume(1.0 - i * 0.15)
+                ch.play(snd)
 
     def play_sound(self, name):
         if name == "shoot":
@@ -203,6 +264,9 @@ class Game:
 
     def stop_music(self):
         pygame.mixer.music.stop()
+
+    def stop_all_sounds(self):
+        pygame.mixer.stop()
 
     def load_states(self):
         self.title_screen = Title(self)

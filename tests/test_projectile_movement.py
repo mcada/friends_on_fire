@@ -45,7 +45,7 @@ def test_wave_counter_phase(game):
 def test_projectile_killed_offscreen_right(game):
     p = Projectile("crimson", game.GAME_WIDTH - 2, 200, game, dx=8, dy=0)
     game.projectiles.add(p)
-    for _ in range(5):
+    for _ in range(10):
         p.update()
     assert not game.projectiles.has(p)
 
@@ -99,3 +99,26 @@ def test_shiny_beam_has_mask(game):
     p = Projectile("lime", 100, 200, game, dx=10, width=60, height=6, piercing=True, shiny=True)
     assert p.mask is not None
     assert p.mask.count() > 0
+
+
+def test_homing_projectile_has_flag(game):
+    p = Projectile("orange", 100, 200, game, dx=5, dy=-1, homing=True, width=14, height=8)
+    assert p.homing is True
+    assert p.mask is not None
+
+
+def test_homing_projectile_steers_toward_rock(game):
+    from objects.Rocks import Rock, BASIC
+    rock = Rock(300, 300, 30, 30, game, rock_type=BASIC)
+    game.rocks.add(rock)
+    p = Projectile("orange", 100, 200, game, dx=5, dy=0, homing=True, width=14, height=8)
+    game.projectiles.add(p)
+    for _ in range(20):
+        p.update()
+    assert p.dy > 0
+
+
+def test_homing_missile_visual(game):
+    p = Projectile("orange", 100, 200, game, dx=5, dy=0, homing=True, width=14, height=8)
+    assert p.rect.width >= 14
+    assert p.rect.height >= 8

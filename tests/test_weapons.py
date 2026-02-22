@@ -1,5 +1,6 @@
 from objects.Weapon import (
-    Weapon, StraightCannon, SpreadShot, LaserCannon, SECONDARY_WEAPONS,
+    Weapon, StraightCannon, SpreadShot, LaserCannon, HomingMissile,
+    SECONDARY_WEAPONS,
 )
 
 
@@ -112,6 +113,38 @@ class TestLaserCannon:
             prev = count
 
 
+class TestHomingMissile:
+    def test_level1_single(self):
+        w = HomingMissile()
+        projs = w.get_projectiles(100, 200)
+        assert len(projs) == 1
+        assert projs[0]["homing"] is True
+
+    def test_level2_adds_missiles(self):
+        w = HomingMissile()
+        w.level = 2
+        projs = w.get_projectiles(100, 200)
+        assert len(projs) == 3
+        assert all(p["homing"] for p in projs)
+
+    def test_level3_adds_more_and_shiny(self):
+        w = HomingMissile()
+        w.level = 3
+        projs = w.get_projectiles(100, 200)
+        assert len(projs) == 5
+        assert all(p["shiny"] for p in projs)
+        assert all(p["homing"] for p in projs)
+
+    def test_levels_additive(self):
+        w = HomingMissile()
+        prev = len(w.get_projectiles(100, 200))
+        for _ in range(w.max_level - 1):
+            w.upgrade()
+            cur = len(w.get_projectiles(100, 200))
+            assert cur >= prev
+            prev = cur
+
+
 class TestUpgradeMechanics:
     def test_upgrade_returns_true_when_not_max(self):
         w = StraightCannon()
@@ -130,7 +163,7 @@ class TestUpgradeMechanics:
         assert w.is_max_level()
 
     def test_secondary_weapons_list(self):
-        assert len(SECONDARY_WEAPONS) == 2
+        assert len(SECONDARY_WEAPONS) == 3
         for cls in SECONDARY_WEAPONS:
             assert cls.max_level == 3
 

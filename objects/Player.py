@@ -27,8 +27,11 @@ class Player:
         self.primary = StraightCannon()
         self.secondary = None
         self.secondary_levels = {}
+        self.secondary_inventory = []
+        self.sec_weapon_states = {}
         self.sec_state = SEC_READY
         self.sec_state_timer = 0
+        self.auto_fire = False
         self.has_shield = False
         self.shield_flash = 0
         self._build_sprites()
@@ -38,13 +41,40 @@ class Player:
     def set_secondary(self, weapon_cls):
         """Equip a secondary weapon. Remembers levels of previous weapons."""
         if self.secondary:
-            self.secondary_levels[type(self.secondary)] = self.secondary.level
+            cur = type(self.secondary)
+            self.secondary_levels[cur] = self.secondary.level
+            self.sec_weapon_states[cur] = {
+                "state": self.sec_state, "timer": self.sec_state_timer,
+            }
         new_weapon = weapon_cls()
         new_weapon.level = self.secondary_levels.get(weapon_cls, 1)
         self.secondary = new_weapon
         self.secondary_levels[weapon_cls] = new_weapon.level
+        if weapon_cls not in self.secondary_inventory:
+            self.secondary_inventory.append(weapon_cls)
         self.sec_state = SEC_READY
         self.sec_state_timer = 0
+        self.sec_weapon_states[weapon_cls] = {"state": SEC_READY, "timer": 0}
+        self._build_sprites()
+
+    def _cycle_secondary(self):
+        """Rotate to the next collected secondary weapon with independent cooldowns."""
+        if len(self.secondary_inventory) <= 1:
+            return
+        cur_cls = type(self.secondary)
+        self.secondary_levels[cur_cls] = self.secondary.level
+        self.sec_weapon_states[cur_cls] = {
+            "state": self.sec_state, "timer": self.sec_state_timer,
+        }
+        current_idx = self.secondary_inventory.index(cur_cls)
+        next_idx = (current_idx + 1) % len(self.secondary_inventory)
+        next_cls = self.secondary_inventory[next_idx]
+        new_weapon = next_cls()
+        new_weapon.level = self.secondary_levels.get(next_cls, 1)
+        self.secondary = new_weapon
+        ws = self.sec_weapon_states.get(next_cls, {"state": SEC_READY, "timer": 0})
+        self.sec_state = ws["state"]
+        self.sec_state_timer = ws["timer"]
         self._build_sprites()
 
     def upgrade_secondary(self):
@@ -107,7 +137,16 @@ class Player:
         if self.secondary_shot_cooldown > 0:
             self.secondary_shot_cooldown -= delta_time
 
-        if actions["space"] and self.primary_cooldown <= 0:
+        if actions.get("toggle_autofire"):
+            self.auto_fire = not self.auto_fire
+            actions["toggle_autofire"] = False
+
+        should_fire = actions["space"]
+        if not should_fire and self.auto_fire:
+            from states.game_world import Game_World
+            should_fire = isinstance(self.game.state_stack[-1], Game_World)
+
+        if should_fire and self.primary_cooldown <= 0:
             muzzle_x = self.position_x + PLAYER_WIDTH
             muzzle_y = self.position_y + PLAYER_HEIGHT / 2
             self._spawn_projectiles(self.primary, muzzle_x, muzzle_y)
@@ -125,6 +164,22 @@ class Player:
         return max(1.0, SECONDARY_CYCLE - self._sec_active_duration())
 
     def _update_secondary(self, dt, actions):
+        if actions.get("cycle_weapon"):
+            if self.secondary and len(self.secondary_inventory) > 1:
+                self._cycle_secondary()
+            actions["cycle_weapon"] = False
+
+        # Tick background cooldowns for non-active weapons
+        active_cls = type(self.secondary) if self.secondary else None
+        for cls, ws in self.sec_weapon_states.items():
+            if cls == active_cls:
+                continue
+            if ws["state"] == SEC_COOLDOWN:
+                ws["timer"] -= dt
+                if ws["timer"] <= 0:
+                    ws["state"] = SEC_READY
+                    ws["timer"] = 0
+
         if not self.secondary:
             return
 
@@ -152,8 +207,12 @@ class Player:
                 self.sec_state = SEC_READY
                 self.sec_state_timer = 0
 
+        self.sec_weapon_states[active_cls] = {
+            "state": self.sec_state, "timer": self.sec_state_timer,
+        }
+
     def _spawn_projectiles(self, weapon, mx, my):
-        for spec in weapon.get_projectiles(mx, my):
+        for spec in weapon.get_projectiles(mx, my, game=self.game):
             kwargs = {k: v for k, v in spec.items() if k not in ("x", "y")}
             self.game.projectiles.add(
                 Projectile(weapon.color, spec["x"], spec["y"], self.game, **kwargs)

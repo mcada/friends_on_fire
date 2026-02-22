@@ -82,8 +82,11 @@ class Game_World(State):
         player.primary = StraightCannon()
         player.secondary = None
         player.secondary_levels = {}
+        player.secondary_inventory = []
+        player.sec_weapon_states = {}
         player.sec_state = "ready"
         player.sec_state_timer = 0
+        player.auto_fire = False
         player.has_shield = False
         player.shield_flash = 0
         player._build_sprites()
@@ -206,8 +209,15 @@ class Game_World(State):
             else:
                 self.upgrade_msg = f"{player.secondary.name} MAX!"
         else:
+            had_before = weapon_cls in player.secondary_levels
             player.set_secondary(weapon_cls)
-            self.upgrade_msg = f"{player.secondary.name} Lv{player.secondary.level}"
+            if had_before:
+                if player.upgrade_secondary():
+                    self.upgrade_msg = f"{player.secondary.name} Lv{player.secondary.level}"
+                else:
+                    self.upgrade_msg = f"{player.secondary.name} MAX!"
+            else:
+                self.upgrade_msg = f"{player.secondary.name} Lv{player.secondary.level}"
 
         self.upgrade_count += 1
         self.upgrade_msg_timer = 2.0
@@ -258,7 +268,7 @@ class Game_World(State):
 
     def _on_boss_defeated(self):
         self.spawn_particles(self.boss.rect.centerx, self.boss.rect.centery, count=30)
-        self.game.play_sound("explosion")
+        self.game.play_boss_death_sound()
         self.boss.boss_projectiles.empty()
         self.boss = None
         self.boss_phase = False
@@ -337,6 +347,7 @@ class Game_World(State):
     def _trigger_death(self):
         self.game_over = True
         self.game.reset_keys()
+        self.game.stop_all_sounds()
         self.spawn_particles(
             int(self.game.player.position_x) + 40,
             int(self.game.player.position_y) + 17, count=15,
@@ -377,6 +388,7 @@ class Game_World(State):
             return
 
         if actions["start"] or actions["escape"]:
+            self.game.stop_all_sounds()
             new_state = PauseMenu(self.game)
             new_state.enter_state()
             return
@@ -451,6 +463,7 @@ class Game_World(State):
                 self.game.pickups.add(
                     ShieldPickup(rock.rect.centerx, rock.rect.centery, self.game)
                 )
+                self.kills_since_shield = 0
             elif self._should_spawn_upgrade():
                 wtype = self._random_pickup_type()
                 self.game.pickups.add(
@@ -497,12 +510,194 @@ class Game_World(State):
 
     # ---- rendering ----
 
-    def _draw_hud_line(self, display, text, color, x, y):
-        font = pygame.font.SysFont("comicsans", 22)
-        shadow = font.render(text, True, (0, 0, 0))
-        main = font.render(text, True, color)
-        display.blit(shadow, (x + 1, y + 1))
-        display.blit(main, (x, y))
+    ICON_SIZE = 44
+    ICON_PAD = 6
+    ICON_RADIUS = 7
+
+    def _draw_star(self, surface, cx, cy, size, color):
+        points = []
+        for i in range(10):
+            angle = math.radians(i * 36 - 90)
+            r = size if i % 2 == 0 else size * 0.38
+            points.append((cx + r * math.cos(angle), cy + r * math.sin(angle)))
+        pygame.draw.polygon(surface, color, points)
+
+    def _draw_weapon_icon(self, display, x, y, weapon, fill_ratio=1.0,
+                          glowing=False, greyed=False):
+        sz = self.ICON_SIZE
+        rd = self.ICON_RADIUS
+        color = pygame.Color(weapon.color)
+        r, g, b = color.r, color.g, color.b
+
+        icon = pygame.Surface((sz, sz), pygame.SRCALPHA)
+
+        # Base (dark background)
+        pygame.draw.rect(icon, (25, 25, 30, 220), (0, 0, sz, sz), border_radius=rd)
+
+        if greyed and fill_ratio < 1.0:
+            pygame.draw.rect(icon, (20, 20, 25, 210), (0, 0, sz, sz), border_radius=rd)
+
+            if fill_ratio > 0:
+                fill_h = max(1, int(sz * fill_ratio))
+                fill_y = sz - fill_h
+                colored = pygame.Surface((sz, sz), pygame.SRCALPHA)
+                pygame.draw.rect(colored, (r, g, b, 140), (0, 0, sz, sz), border_radius=rd)
+                clip = pygame.Surface((sz, sz), pygame.SRCALPHA)
+                pygame.draw.rect(clip, (255, 255, 255, 255), (0, fill_y, sz, fill_h))
+                colored.blit(clip, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
+                icon.blit(colored, (0, 0))
+        else:
+            alpha = 140 if not greyed else 70
+            pygame.draw.rect(icon, (r, g, b, alpha), (0, 0, sz, sz), border_radius=rd)
+
+        # Weapon symbol in top portion
+        self._draw_weapon_symbol(icon, weapon, sz)
+
+        # Level stars along the bottom
+        level = weapon.level
+        max_lvl = weapon.max_level
+        star_r = 5
+        total_w = max_lvl * (star_r * 2 + 3) - 3
+        sx_start = (sz - total_w) / 2
+        star_cy = sz - star_r - 4
+        for i in range(max_lvl):
+            scx = sx_start + i * (star_r * 2 + 3) + star_r
+            if i < level:
+                self._draw_star(icon, scx, star_cy, star_r, (255, 255, 100))
+            else:
+                self._draw_star(icon, scx, star_cy, star_r, (70, 70, 70))
+
+        # Border
+        if glowing:
+            t = pygame.time.get_ticks() / 1000
+            pulse = 0.6 + 0.4 * math.sin(t * 6)
+            border_alpha = int(200 * pulse)
+            border_col = (min(255, r + 80), min(255, g + 80), min(255, b + 80), border_alpha)
+            pygame.draw.rect(icon, border_col, (0, 0, sz, sz), 3, border_radius=rd)
+            glow = pygame.Surface((sz + 10, sz + 10), pygame.SRCALPHA)
+            pygame.draw.rect(glow, (r, g, b, int(50 * pulse)),
+                             (0, 0, sz + 10, sz + 10), border_radius=rd + 3)
+            display.blit(glow, (x - 5, y - 5))
+        else:
+            border_col = (160, 160, 170, 200) if not greyed else (90, 90, 95, 180)
+            pygame.draw.rect(icon, border_col, (0, 0, sz, sz), 2, border_radius=rd)
+
+        display.blit(icon, (x, y))
+
+    def _draw_weapon_symbol(self, surface, weapon, sz):
+        from objects.Weapon import StraightCannon, SpreadShot, LaserCannon, HomingMissile
+        color = pygame.Color(weapon.color)
+        bright = (min(255, color.r + 100), min(255, color.g + 100),
+                  min(255, color.b + 100))
+        cx, cy = sz // 2, sz // 2 - 4
+
+        if isinstance(weapon, StraightCannon):
+            # Barrel
+            pygame.draw.rect(surface, bright, (cx - 2, cy - 3, 18, 6))
+            pygame.draw.rect(surface, (255, 255, 255, 180), (cx, cy - 1, 14, 2))
+            # Body
+            body = [(cx - 10, cy - 7), (cx - 2, cy - 7),
+                    (cx - 2, cy + 7), (cx - 10, cy + 7),
+                    (cx - 14, cy)]
+            pygame.draw.polygon(surface, bright, body)
+            dim = (max(0, bright[0] - 50), max(0, bright[1] - 50), max(0, bright[2] - 50))
+            pygame.draw.polygon(surface, dim, body, 2)
+            # Muzzle flash
+            pygame.draw.circle(surface, (255, 230, 150), (cx + 17, cy), 3)
+        elif isinstance(weapon, SpreadShot):
+            origin = (cx - 8, cy)
+            for angle_deg in (-25, 0, 25):
+                a = math.radians(angle_deg)
+                ex = origin[0] + 22 * math.cos(a)
+                ey = origin[1] + 22 * math.sin(a)
+                pygame.draw.line(surface, (*bright[:3], 100) if len(bright) >= 3 else bright,
+                                 origin, (int(ex), int(ey)), 1)
+                pygame.draw.circle(surface, bright, (int(ex), int(ey)), 3)
+                pygame.draw.circle(surface, (255, 255, 255), (int(ex), int(ey)), 1)
+        elif isinstance(weapon, LaserCannon):
+            pygame.draw.rect(surface, bright, (cx - 14, cy - 2, 28, 5))
+            pygame.draw.line(surface, (255, 255, 255), (cx - 12, cy), (cx + 12, cy), 1)
+        elif isinstance(weapon, HomingMissile):
+            # Missile body
+            pygame.draw.polygon(surface, bright,
+                                [(cx + 12, cy), (cx + 6, cy - 4), (cx - 8, cy - 3),
+                                 (cx - 8, cy + 3), (cx + 6, cy + 4)])
+            # Fins
+            dim = (max(0, bright[0] - 60), max(0, bright[1] - 60), max(0, bright[2] - 60))
+            pygame.draw.polygon(surface, dim,
+                                [(cx - 8, cy - 3), (cx - 12, cy - 8), (cx - 5, cy - 2)])
+            pygame.draw.polygon(surface, dim,
+                                [(cx - 8, cy + 3), (cx - 12, cy + 8), (cx - 5, cy + 2)])
+            # Target crosshair
+            cr = 5
+            tcx, tcy = cx - 2, cy - 10
+            pygame.draw.circle(surface, bright, (tcx, tcy), cr, 1)
+            pygame.draw.line(surface, bright, (tcx - cr - 1, tcy), (tcx + cr + 1, tcy), 1)
+            pygame.draw.line(surface, bright, (tcx, tcy - cr - 1), (tcx, tcy + cr + 1), 1)
+
+    def _draw_shield_icon(self, display, x, y, active):
+        sz = self.ICON_SIZE
+        rd = self.ICON_RADIUS
+        icon = pygame.Surface((sz, sz), pygame.SRCALPHA)
+        if active:
+            pygame.draw.rect(icon, (40, 100, 180, 140), (0, 0, sz, sz), border_radius=rd)
+            t = pygame.time.get_ticks() / 1000
+            pulse = 0.7 + 0.3 * math.sin(t * 4)
+            border_a = int(220 * pulse)
+            pygame.draw.rect(icon, (80, 180, 255, border_a), (0, 0, sz, sz), 3, border_radius=rd)
+        else:
+            pygame.draw.rect(icon, (30, 30, 35, 180), (0, 0, sz, sz), border_radius=rd)
+            pygame.draw.rect(icon, (70, 70, 75, 150), (0, 0, sz, sz), 2, border_radius=rd)
+        cx, cy = sz // 2, sz // 2
+        sc = (80, 200, 255) if active else (80, 80, 80)
+        points = [
+            (cx, cy - 12), (cx + 10, cy - 6), (cx + 10, cy + 4),
+            (cx + 5, cy + 10), (cx, cy + 13),
+            (cx - 5, cy + 10), (cx - 10, cy + 4), (cx - 10, cy - 6),
+        ]
+        pygame.draw.polygon(icon, sc, points)
+        pygame.draw.polygon(icon, (min(255, sc[0] + 60), min(255, sc[1] + 60),
+                                   min(255, sc[2] + 60)), points, 2)
+        display.blit(icon, (x, y))
+
+    def _draw_cooldown_bar(self, display, x, y, ratio, color):
+        """Draw a colored progress bar below a weapon icon."""
+        bar_w = self.ICON_SIZE
+        bar_h = 5
+        bg = pygame.Surface((bar_w, bar_h), pygame.SRCALPHA)
+        pygame.draw.rect(bg, (20, 20, 25, 200), (0, 0, bar_w, bar_h), border_radius=2)
+        display.blit(bg, (x, y))
+        if ratio > 0:
+            fill_w = max(2, int(bar_w * ratio))
+            c = pygame.Color(color)
+            bar = pygame.Surface((fill_w, bar_h), pygame.SRCALPHA)
+            pygame.draw.rect(bar, (c.r, c.g, c.b, 230), (0, 0, fill_w, bar_h),
+                             border_radius=2)
+            bright = (min(255, c.r + 80), min(255, c.g + 80), min(255, c.b + 80))
+            pygame.draw.line(bar, (*bright, 180), (1, 1), (fill_w - 2, 1))
+            display.blit(bar, (x, y))
+
+    def _draw_cooldown_text(self, display, x, y, seconds_left):
+        """Draw remaining seconds centered on the icon."""
+        font = pygame.font.SysFont("comicsans", 16)
+        txt = font.render(f"{seconds_left:.1f}", True, (255, 255, 255))
+        tx = x + self.ICON_SIZE // 2 - txt.get_width() // 2
+        ty = y + self.ICON_SIZE // 2 - txt.get_height() // 2
+        shadow = font.render(f"{seconds_left:.1f}", True, (0, 0, 0))
+        display.blit(shadow, (tx + 1, ty + 1))
+        display.blit(txt, (tx, ty))
+
+    def _draw_empty_icon(self, display, x, y):
+        sz = self.ICON_SIZE
+        rd = self.ICON_RADIUS
+        icon = pygame.Surface((sz, sz), pygame.SRCALPHA)
+        pygame.draw.rect(icon, (25, 25, 30, 150), (0, 0, sz, sz), border_radius=rd)
+        pygame.draw.rect(icon, (60, 60, 65, 120), (0, 0, sz, sz), 2, border_radius=rd)
+        cx, cy = sz // 2, sz // 2
+        font = pygame.font.SysFont("comicsans", 18)
+        txt = font.render("?", True, (80, 80, 80))
+        icon.blit(txt, (cx - txt.get_width() // 2, cy - txt.get_height() // 2))
+        display.blit(icon, (x, y))
 
     def render(self, display):
         display.blit(self.background, (0, 0))
@@ -550,40 +745,95 @@ class Game_World(State):
             50,
         )
 
-        # Weapon HUD
+        # Weapon icon HUD
         player = self.game.player
-        hud_x = 12
-        hud_y = 10
+        hud_x = 10
+        hud_y = 8
+        step = self.ICON_SIZE + self.ICON_PAD
+        hint_y = hud_y + self.ICON_SIZE + 18
+        hint_font = pygame.font.SysFont("comicsans", 13)
 
-        primary_color = pygame.Color(player.primary.color)
-        lvl = player.primary.level
-        max_lvl = player.primary.max_level
-        pips = ">" * lvl + "-" * (max_lvl - lvl)
-        primary_text = f"Primary  [{pips}]"
-        self._draw_hud_line(display, primary_text, primary_color, hud_x, hud_y)
+        self._draw_weapon_icon(display, hud_x, hud_y, player.primary,
+                               fill_ratio=1.0, glowing=player.auto_fire)
 
-        if player.secondary:
-            from objects.Player import SEC_READY, SEC_ACTIVE, SEC_COOLDOWN
-            sec = player.secondary
-            sec_color = pygame.Color(sec.color)
-            s_lvl = sec.level
-            s_max = sec.max_level
-            s_pips = ">" * s_lvl + "-" * (s_max - s_lvl)
+        # Primary key hint
+        if player.auto_fire:
+            htxt = hint_font.render("AUTO", True, (80, 255, 80))
+        else:
+            htxt = hint_font.render("SPACE", True, (140, 140, 150))
+        display.blit(htxt, (hud_x + self.ICON_SIZE // 2 - htxt.get_width() // 2,
+                            hint_y))
 
-            if player.sec_state == SEC_ACTIVE:
-                tag = f"ACTIVE {player.sec_state_timer:.1f}s"
-            elif player.sec_state == SEC_COOLDOWN:
-                tag = f"CD {player.sec_state_timer:.1f}s"
-            else:
-                tag = "READY [Shift]"
-            sec_text = f"{sec.name}  [{s_pips}]  {tag}"
-            self._draw_hud_line(display, sec_text, sec_color, hud_x, hud_y + 24)
+        ix = hud_x + step
+        if player.secondary_inventory:
+            from objects.Player import (SEC_READY, SEC_ACTIVE, SEC_COOLDOWN,
+                                        SECONDARY_CYCLE, SECONDARY_ACTIVE_PER_LEVEL)
+            first_sec_x = ix
+            for weapon_cls in player.secondary_inventory:
+                is_active = player.secondary and type(player.secondary) is weapon_cls
+                if is_active:
+                    sec = player.secondary
+                    if player.sec_state == SEC_ACTIVE:
+                        self._draw_weapon_icon(display, ix, hud_y, sec,
+                                               fill_ratio=1.0, glowing=True)
+                    elif player.sec_state == SEC_COOLDOWN:
+                        total_cd = player._sec_cooldown_duration()
+                        elapsed_cd = total_cd - player.sec_state_timer
+                        ratio = min(1.0, elapsed_cd / total_cd) if total_cd > 0 else 1.0
+                        self._draw_weapon_icon(display, ix, hud_y, sec,
+                                               fill_ratio=ratio, greyed=True)
+                        bar_y = hud_y + self.ICON_SIZE + 2
+                        self._draw_cooldown_bar(display, ix, bar_y, ratio,
+                                                sec.color)
+                        self._draw_cooldown_text(display, ix, hud_y,
+                                                 player.sec_state_timer)
+                    else:
+                        self._draw_weapon_icon(display, ix, hud_y, sec, fill_ratio=1.0)
+                    if len(player.secondary_inventory) > 1:
+                        acx = ix + self.ICON_SIZE // 2
+                        acy = hud_y + self.ICON_SIZE + 2
+                        if player.sec_state == SEC_COOLDOWN:
+                            acy += 8
+                        pygame.draw.polygon(display, (255, 255, 100),
+                                            [(acx - 4, acy + 5),
+                                             (acx + 4, acy + 5),
+                                             (acx, acy)])
+                else:
+                    tmp = weapon_cls()
+                    tmp.level = player.secondary_levels.get(weapon_cls, 1)
+                    ws = player.sec_weapon_states.get(weapon_cls,
+                                                      {"state": SEC_READY, "timer": 0})
+                    if ws["state"] == SEC_COOLDOWN:
+                        wlevel = player.secondary_levels.get(weapon_cls, 1)
+                        total_cd = max(1.0, SECONDARY_CYCLE
+                                       - wlevel * SECONDARY_ACTIVE_PER_LEVEL)
+                        elapsed_cd = total_cd - ws["timer"]
+                        ratio = min(1.0, elapsed_cd / total_cd) if total_cd > 0 else 1.0
+                        self._draw_weapon_icon(display, ix, hud_y, tmp,
+                                               fill_ratio=ratio, greyed=True)
+                        bar_y = hud_y + self.ICON_SIZE + 2
+                        self._draw_cooldown_bar(display, ix, bar_y, ratio, tmp.color)
+                        self._draw_cooldown_text(display, ix, hud_y, ws["timer"])
+                    else:
+                        self._draw_weapon_icon(display, ix, hud_y, tmp,
+                                               fill_ratio=1.0, greyed=True)
+                ix += step
 
-        if player.has_shield:
-            self._draw_hud_line(
-                display, "SHIELD ACTIVE",
-                (80, 180, 255), hud_x, hud_y + 48,
-            )
+            # Secondary key hints
+            sec_count = len(player.secondary_inventory)
+            sec_mid = first_sec_x + (sec_count * step - self.ICON_PAD) // 2
+            parts = ["SHIFT"]
+            if sec_count > 1:
+                parts.append("Q")
+            hint_str = " \u00b7 ".join(parts)
+            htxt = hint_font.render(hint_str, True, (140, 140, 150))
+            display.blit(htxt, (sec_mid - htxt.get_width() // 2, hint_y))
+            ix_after = first_sec_x + sec_count * step
+        else:
+            self._draw_empty_icon(display, ix, hud_y)
+            ix_after = ix + step
+
+        self._draw_shield_icon(display, ix_after, hud_y, player.has_shield)
 
         if self.upgrade_msg_timer > 0:
             alpha = min(1.0, self.upgrade_msg_timer / 0.3)
