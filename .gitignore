@@ -1,4 +1,6 @@
 .vscode/
+scores.json
+*.spec
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

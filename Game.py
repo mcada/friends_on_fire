@@ -1,8 +1,9 @@
-import os, json, random, pygame
+import os, sys, json, random, pygame
 from states.title import Title
 from objects.Player import Player
 
-SCORES_FILE = os.path.join(os.path.dirname(__file__), "scores.json")
+BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+SCORES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scores.json")
 MAX_SCORES = 10
 
 
@@ -137,7 +138,7 @@ class Game:
         surface.blit(text_surface, text_rect)
 
     def load_assets(self):
-        self.assets_dir = os.path.join("assets")
+        self.assets_dir = os.path.join(BASE_DIR, "assets")
         self.sprite_dir = os.path.join(self.assets_dir, "sprites")
         self.sound_dir = os.path.join(self.assets_dir, "sounds")
         self.font = pygame.font.SysFont("comicsans", 30)
