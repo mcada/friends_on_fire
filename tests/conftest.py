@@ -41,4 +41,5 @@ def actions():
         "start": False,
         "space": False,
         "escape": False,
+        "secondary": False,
     }

@@ -1,4 +1,8 @@
-from objects.Player import PLAYER_HEIGHT, CANNON_PAD
+from objects.Player import (
+    PLAYER_HEIGHT, CANNON_PAD,
+    SEC_READY, SEC_ACTIVE, SEC_COOLDOWN,
+    SECONDARY_CYCLE, SECONDARY_ACTIVE_PER_LEVEL,
+)
 from objects.Weapon import SpreadShot, LaserCannon
 
 
@@ -127,47 +131,94 @@ def test_secondary_makes_sprite_taller(game):
     assert p.curr_image.get_height() == base_h + CANNON_PAD
 
 
-def test_secondary_fires_on_first_press(game, actions):
-    """Both cooldowns start at 0, so the very first shot fires both."""
+def test_secondary_activates_on_key(game, actions):
+    """Pressing secondary key transitions from READY to ACTIVE."""
+    p = game.player
+    p.set_secondary(SpreadShot)
+    assert p.sec_state == SEC_READY
+    actions["secondary"] = True
+    p.update(1 / 60, actions)
+    assert p.sec_state == SEC_ACTIVE
+
+
+def test_secondary_fires_during_active(game, actions):
+    """Secondary auto-fires during ACTIVE state."""
+    game.projectiles.empty()
+    p = game.player
+    p.set_secondary(SpreadShot)
+    actions["secondary"] = True
+    p.update(1 / 60, actions)
+    sec_projs = len(game.projectiles) - (1 if actions.get("space") else 0)
+    assert sec_projs >= 1
+
+
+def test_secondary_active_duration_scales_with_level(game):
+    p = game.player
+    p.set_secondary(SpreadShot)
+    assert p._sec_active_duration() == 1 * SECONDARY_ACTIVE_PER_LEVEL
+    p.upgrade_secondary()
+    assert p._sec_active_duration() == 2 * SECONDARY_ACTIVE_PER_LEVEL
+
+
+def test_secondary_enters_cooldown_after_active(game, actions):
+    """After active time expires, enters COOLDOWN."""
+    p = game.player
+    p.set_secondary(SpreadShot)
+    actions["secondary"] = True
+    p.update(0.01, actions)
+    assert p.sec_state == SEC_ACTIVE
+    actions["secondary"] = False
+    active_dur = p._sec_active_duration()
+    p.update(active_dur + 0.1, actions)
+    assert p.sec_state == SEC_COOLDOWN
+
+
+def test_secondary_returns_to_ready_after_cooldown(game, actions):
+    """After cooldown expires, returns to READY."""
+    p = game.player
+    p.set_secondary(SpreadShot)
+    actions["secondary"] = True
+    p.update(0.01, actions)
+    actions["secondary"] = False
+    active_dur = p._sec_active_duration()
+    p.update(active_dur + 0.1, actions)
+    assert p.sec_state == SEC_COOLDOWN
+    cd_dur = p._sec_cooldown_duration()
+    p.update(cd_dur + 0.1, actions)
+    assert p.sec_state == SEC_READY
+
+
+def test_secondary_cooldown_min_1s(game):
+    """At max level, cooldown should be at least 1 second."""
+    p = game.player
+    p.set_secondary(SpreadShot)
+    while p.upgrade_secondary():
+        pass
+    assert p._sec_cooldown_duration() >= 1.0
+
+
+def test_primary_fires_independently_of_secondary(game, actions):
+    """Primary fires on space even when secondary is on cooldown."""
+    game.projectiles.empty()
+    p = game.player
+    p.set_secondary(SpreadShot)
+    p.sec_state = SEC_COOLDOWN
+    p.sec_state_timer = 5.0
+    p.primary_cooldown = 0
+    actions["space"] = True
+    p.update(1 / 60, actions)
+    assert len(game.projectiles) == 1
+
+
+def test_secondary_does_not_fire_on_space(game, actions):
+    """Space alone does not activate secondary."""
     game.projectiles.empty()
     p = game.player
     p.set_secondary(SpreadShot)
     p.primary_cooldown = 0
-    p.secondary_cooldown = 0
     actions["space"] = True
     p.update(1 / 60, actions)
-    assert len(game.projectiles) == 2
-
-
-def test_secondary_has_own_cooldown(game, actions):
-    """After the first shot, secondary should be on its own longer cooldown."""
-    game.projectiles.empty()
-    p = game.player
-    p.set_secondary(SpreadShot)
-    p.primary_cooldown = 0
-    p.secondary_cooldown = 0
-    actions["space"] = True
-    p.update(1 / 60, actions)
-    assert p.secondary_cooldown > p.primary_cooldown
-
-
-def test_primary_fires_without_secondary(game, actions):
-    """After first volley, primary fires again while secondary is still cooling."""
-    game.projectiles.empty()
-    p = game.player
-    p.set_secondary(SpreadShot)
-    p.primary_cooldown = 0
-    p.secondary_cooldown = 0
-    actions["space"] = True
-    p.update(1 / 60, actions)
-    count_after_first = len(game.projectiles)
-
-    actions["space"] = False
-    for _ in range(35):
-        p.update(1 / 60, actions)
-    actions["space"] = True
-    p.update(1 / 60, actions)
-    assert len(game.projectiles) == count_after_first + 1
+    assert len(game.projectiles) == 1
 
 
 def test_laser_fires_slower_than_spread(game):

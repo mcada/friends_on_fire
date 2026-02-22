@@ -6,6 +6,13 @@ from objects.Weapon import StraightCannon
 PLAYER_WIDTH, PLAYER_HEIGHT = 80, 35
 CANNON_PAD = 10
 
+SECONDARY_CYCLE = 10.0
+SECONDARY_ACTIVE_PER_LEVEL = 3.0
+
+SEC_READY = "ready"
+SEC_ACTIVE = "active"
+SEC_COOLDOWN = "cooldown"
+
 
 class Player:
     def __init__(self, game):
@@ -16,10 +23,14 @@ class Player:
         self.player_speed = 300
         self.primary_fire_rate = 0.5
         self.primary_cooldown = 0
-        self.secondary_cooldown = 0
+        self.secondary_shot_cooldown = 0
         self.primary = StraightCannon()
         self.secondary = None
         self.secondary_levels = {}
+        self.sec_state = SEC_READY
+        self.sec_state_timer = 0
+        self.has_shield = False
+        self.shield_flash = 0
         self._build_sprites()
 
     # ---- secondary weapon management ----
@@ -32,6 +43,8 @@ class Player:
         new_weapon.level = self.secondary_levels.get(weapon_cls, 1)
         self.secondary = new_weapon
         self.secondary_levels[weapon_cls] = new_weapon.level
+        self.sec_state = SEC_READY
+        self.sec_state_timer = 0
         self._build_sprites()
 
     def upgrade_secondary(self):
@@ -91,22 +104,53 @@ class Player:
         self.animate(delta_time, direction_x, direction_y)
         if self.primary_cooldown > 0:
             self.primary_cooldown -= delta_time
-        if self.secondary_cooldown > 0:
-            self.secondary_cooldown -= delta_time
+        if self.secondary_shot_cooldown > 0:
+            self.secondary_shot_cooldown -= delta_time
 
-        if actions["space"]:
-            if self.primary_cooldown <= 0:
-                muzzle_x = self.position_x + PLAYER_WIDTH
-                muzzle_y = self.position_y + PLAYER_HEIGHT / 2
-                self._spawn_projectiles(self.primary, muzzle_x, muzzle_y)
-                self.game.play_sound("shoot")
-                self.primary_cooldown = self.primary_fire_rate
-            if self.secondary and self.secondary_cooldown <= 0:
+        if actions["space"] and self.primary_cooldown <= 0:
+            muzzle_x = self.position_x + PLAYER_WIDTH
+            muzzle_y = self.position_y + PLAYER_HEIGHT / 2
+            self._spawn_projectiles(self.primary, muzzle_x, muzzle_y)
+            self.game.play_sound("shoot")
+            self.primary_cooldown = self.primary_fire_rate
+
+        self._update_secondary(delta_time, actions)
+
+    def _sec_active_duration(self):
+        if not self.secondary:
+            return 0
+        return self.secondary.level * SECONDARY_ACTIVE_PER_LEVEL
+
+    def _sec_cooldown_duration(self):
+        return max(1.0, SECONDARY_CYCLE - self._sec_active_duration())
+
+    def _update_secondary(self, dt, actions):
+        if not self.secondary:
+            return
+
+        if self.sec_state == SEC_READY:
+            if actions["secondary"]:
+                self.sec_state = SEC_ACTIVE
+                self.sec_state_timer = self._sec_active_duration()
+                self.secondary_shot_cooldown = 0
+
+        if self.sec_state == SEC_ACTIVE:
+            self.sec_state_timer -= dt
+            if self.sec_state_timer <= 0:
+                self.sec_state = SEC_COOLDOWN
+                self.sec_state_timer = self._sec_cooldown_duration()
+            elif self.secondary_shot_cooldown <= 0:
                 muzzle_x = self.position_x + PLAYER_WIDTH
                 sec_y = self.position_y + PLAYER_HEIGHT + CANNON_PAD / 2
                 self._spawn_projectiles(self.secondary, muzzle_x, sec_y)
                 self.game.play_sound(self.secondary.sound_name)
-                self.secondary_cooldown = self.secondary.fire_rate
+                self.secondary_shot_cooldown = self.secondary.fire_rate
+
+        elif self.sec_state == SEC_COOLDOWN:
+            self.sec_state_timer -= dt
+            if self.sec_state_timer <= 0:
+                self.sec_state = SEC_READY
+                self.sec_state_timer = 0
 
     def _spawn_projectiles(self, weapon, mx, my):
         for spec in weapon.get_projectiles(mx, my):
@@ -117,6 +161,19 @@ class Player:
 
     def render(self, display):
         display.blit(self.curr_image, (self.position_x, self.position_y))
+        if self.has_shield:
+            import math
+            cx = int(self.position_x) + self.curr_image.get_width() // 2
+            cy = int(self.position_y) + self.curr_image.get_height() // 2
+            r = max(self.curr_image.get_width(), self.curr_image.get_height()) // 2 + 6
+            pulse = int(25 + 15 * math.sin(pygame.time.get_ticks() * 0.005))
+            shield_surf = pygame.Surface((r * 2 + 4, r * 2 + 4), pygame.SRCALPHA)
+            sc = r + 2
+            pygame.draw.circle(shield_surf, (80, 180, 255, pulse), (sc, sc), r, 3)
+            pygame.draw.circle(shield_surf, (180, 220, 255, pulse // 2), (sc, sc), r - 2, 1)
+            display.blit(shield_surf, (cx - sc, cy - sc))
+        if self.shield_flash > 0:
+            self.shield_flash -= 1
 
     def animate(self, delta_time, direction_x, direction_y):
         self.last_frame_update += delta_time

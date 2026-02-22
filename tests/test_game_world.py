@@ -14,7 +14,7 @@ def _no_actions():
     return {
         "left": False, "right": False, "up": False, "down": False,
         "action1": False, "action2": False, "start": False, "space": False,
-        "escape": False,
+        "escape": False, "secondary": False,
     }
 
 
@@ -209,3 +209,82 @@ def test_late_game_has_variety(game):
     assert CLUSTER in types
     assert IRON in types
     assert BASIC in types
+
+
+# ---- shield system ----
+
+def test_first_kill_drops_shield(game):
+    gw = _enter_game_world(game)
+    from objects.Projectile import Projectile
+
+    rock = Rock(300, 300, 30, 30, game)
+    game.rocks.add(rock)
+    proj = Projectile("crimson", rock.rect.centerx, rock.rect.centery, game)
+    game.projectiles.add(proj)
+
+    actions = _no_actions()
+    gw.update(1 / 60, actions)
+
+    shield_pickups = [p for p in game.pickups if p.pickup_type == "shield"]
+    assert len(shield_pickups) == 1
+
+
+def test_shield_absorbs_hit(game):
+    gw = _enter_game_world(game)
+    p = game.player
+    p.has_shield = True
+    p.position_x, p.position_y = 200, 200
+    center_x = int(p.position_x) + 40
+    center_y = int(p.position_y) + 17
+    rock = Rock(center_x, center_y, 45, 35, game)
+    game.rocks.add(rock)
+
+    actions = _no_actions()
+    gw.update(1 / 60, actions)
+
+    assert gw.game_over is False
+    assert p.has_shield is False
+
+
+def test_shield_destroys_rock_on_hit(game):
+    gw = _enter_game_world(game)
+    p = game.player
+    p.has_shield = True
+    p.position_x, p.position_y = 200, 200
+    center_x = int(p.position_x) + 40
+    center_y = int(p.position_y) + 17
+    rock = Rock(center_x, center_y, 45, 35, game)
+    game.rocks.add(rock)
+
+    actions = _no_actions()
+    gw.update(1 / 60, actions)
+    assert not rock.alive()
+
+
+def test_no_shield_means_death(game):
+    gw = _enter_game_world(game)
+    p = game.player
+    p.has_shield = False
+    p.position_x, p.position_y = 200, 200
+    center_x = int(p.position_x) + 40
+    center_y = int(p.position_y) + 17
+    rock = Rock(center_x, center_y, 45, 35, game)
+    game.rocks.add(rock)
+
+    actions = _no_actions()
+    gw.update(1 / 60, actions)
+    assert gw.game_over is True
+
+
+def test_shield_pity_chance_grows(game):
+    gw = _enter_game_world(game)
+    base = gw._shield_chance()
+    gw.kills_since_shield = 30
+    assert gw._shield_chance() > base
+
+
+def test_shield_no_drop_when_already_shielded(game):
+    gw = _enter_game_world(game)
+    game.player.has_shield = True
+    gw.total_kills_ever = 1
+    assert gw._should_spawn_shield() is False

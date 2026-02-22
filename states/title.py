@@ -32,8 +32,8 @@ class Title(State):
     def _activate(self):
         label = MENU_ITEMS[self.selected]
         if label == "New Game":
-            from states.game_world import Game_World
-            new_state = Game_World(self.game)
+            from states.level_select import LevelSelect
+            new_state = LevelSelect(self.game)
             new_state.enter_state()
         elif label == "Scoreboard":
             from states.scoreboard import Scoreboard

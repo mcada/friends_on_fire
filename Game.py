@@ -24,6 +24,7 @@ class Game:
             "start": False,
             "space": False,
             "escape": False,
+            "secondary": False,
         }
         self.delta_time = 0
         self.state_stack = []
@@ -67,6 +68,8 @@ class Game:
                     self.actions["space"] = True
                 if event.key == pygame.K_ESCAPE:
                     self.actions["escape"] = True
+                if event.key in (pygame.K_LSHIFT, pygame.K_e):
+                    self.actions["secondary"] = True
 
             if event.type == pygame.KEYUP:
                 if event.key in (pygame.K_a, pygame.K_LEFT):
@@ -87,6 +90,8 @@ class Game:
                     self.actions["space"] = False
                 if event.key == pygame.K_ESCAPE:
                     self.actions["escape"] = False
+                if event.key in (pygame.K_LSHIFT, pygame.K_e):
+                    self.actions["secondary"] = False
 
     def update(self):
         self.state_stack[-1].update(self.delta_time, self.actions)
@@ -112,7 +117,7 @@ class Game:
         from states.game_world import Game_World
         for s in self.state_stack:
             if isinstance(s, Game_World):
-                return not s.game_over
+                return not s.game_over and not s.level_won
         return False
 
     def get_delta_time(self):
