@@ -1,4 +1,4 @@
-import pygame, os, random, math
+import pygame, random, math
 from states.state import State
 from objects.Rocks import Rock, BASIC, CLUSTER, IRON
 from objects.Pickup import UpgradePickup, ShieldPickup
@@ -49,9 +49,7 @@ class Game_World(State):
         self.game.active_game_world = self
         self.game_mode = game_mode
         self.level_num = level_num
-        self.background = pygame.image.load(
-            os.path.join(self.game.assets_dir, "bg.jpeg")
-        ).convert()
+        self.background = self.game.background
         self.elapsed_time = 0
         self.rock_spawn_timer = 0
         self.rock_spawn_interval = 1.0

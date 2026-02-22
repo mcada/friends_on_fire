@@ -1,4 +1,4 @@
-import os, pygame
+import pygame
 from states.state import State
 
 LEVEL_ITEMS = [
@@ -23,9 +23,7 @@ DESCRIPTIONS = {
 class LevelSelect(State):
     def __init__(self, game):
         State.__init__(self, game)
-        self.background = pygame.image.load(
-            os.path.join(self.game.assets_dir, "bg.jpeg")
-        ).convert()
+        self.background = self.game.background.copy()
         dark = pygame.Surface(self.background.get_size())
         dark.fill((0, 0, 0))
         dark.set_alpha(150)

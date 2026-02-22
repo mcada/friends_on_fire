@@ -1,3 +1,5 @@
+import math
+
 import pygame, os
 
 from objects.Projectile import Projectile
@@ -47,6 +49,7 @@ class Player:
             self.secondary_levels[cur] = self.secondary.level
             self.sec_weapon_states[cur] = {
                 "state": self.sec_state, "timer": self.sec_state_timer,
+                "shot_cooldown": self.secondary_shot_cooldown,
             }
         new_weapon = weapon_cls()
         new_weapon.level = self.secondary_levels.get(weapon_cls, 1)
@@ -56,7 +59,10 @@ class Player:
             self.secondary_inventory.append(weapon_cls)
         self.sec_state = SEC_READY
         self.sec_state_timer = 0
-        self.sec_weapon_states[weapon_cls] = {"state": SEC_READY, "timer": 0}
+        self.secondary_shot_cooldown = 0
+        self.sec_weapon_states[weapon_cls] = {
+            "state": SEC_READY, "timer": 0, "shot_cooldown": 0,
+        }
         self._build_sprites()
 
     def _cycle_secondary(self):
@@ -67,6 +73,7 @@ class Player:
         self.secondary_levels[cur_cls] = self.secondary.level
         self.sec_weapon_states[cur_cls] = {
             "state": self.sec_state, "timer": self.sec_state_timer,
+            "shot_cooldown": self.secondary_shot_cooldown,
         }
         current_idx = self.secondary_inventory.index(cur_cls)
         next_idx = (current_idx + 1) % len(self.secondary_inventory)
@@ -74,9 +81,12 @@ class Player:
         new_weapon = next_cls()
         new_weapon.level = self.secondary_levels.get(next_cls, 1)
         self.secondary = new_weapon
-        ws = self.sec_weapon_states.get(next_cls, {"state": SEC_READY, "timer": 0})
+        ws = self.sec_weapon_states.get(next_cls, {
+            "state": SEC_READY, "timer": 0, "shot_cooldown": 0,
+        })
         self.sec_state = ws["state"]
         self.sec_state_timer = ws["timer"]
+        self.secondary_shot_cooldown = ws.get("shot_cooldown", 0)
         self._build_sprites()
 
     def upgrade_secondary(self):
@@ -96,10 +106,13 @@ class Player:
         else:
             self.stationary = list(self._base_stationary)
             self.flames = list(self._base_flames)
+        self.stationary_masks = [pygame.mask.from_surface(s) for s in self.stationary]
+        self.flames_masks = [pygame.mask.from_surface(s) for s in self.flames]
         self.curr_anim_list = self.stationary
+        self.curr_masks = self.stationary_masks
         self.current_frame = 0
         self.curr_image = self.stationary[0]
-        self.mask = pygame.mask.from_surface(self.curr_image)
+        self.mask = self.stationary_masks[0]
 
     @staticmethod
     def _make_cannon(color):
@@ -171,8 +184,10 @@ class Player:
                 self._cycle_secondary()
             actions["cycle_weapon"] = False
 
-        # Tick background timers for non-active weapons
+        # Tick background timers for non-selected weapons
         active_cls = type(self.secondary) if self.secondary else None
+        muzzle_x = self.position_x + PLAYER_WIDTH
+        sec_y = self.position_y + PLAYER_HEIGHT + CANNON_PAD / 2
         for cls, ws in self.sec_weapon_states.items():
             if cls == active_cls:
                 continue
@@ -183,11 +198,18 @@ class Player:
                     ws["timer"] = 0
             elif ws["state"] == SEC_ACTIVE:
                 ws["timer"] -= dt
+                ws["shot_cooldown"] = ws.get("shot_cooldown", 0) - dt
                 if ws["timer"] <= 0:
                     wlevel = self.secondary_levels.get(cls, 1)
                     cd = max(1.0, SECONDARY_CYCLE - wlevel * SECONDARY_ACTIVE_PER_LEVEL)
                     ws["state"] = SEC_COOLDOWN
                     ws["timer"] = cd
+                elif ws["shot_cooldown"] <= 0:
+                    tmp = cls()
+                    tmp.level = self.secondary_levels.get(cls, 1)
+                    self._spawn_projectiles(tmp, muzzle_x, sec_y)
+                    self.game.play_sound(tmp.sound_name)
+                    ws["shot_cooldown"] = tmp.fire_rate
 
         if not self.secondary:
             return
@@ -218,6 +240,7 @@ class Player:
 
         self.sec_weapon_states[active_cls] = {
             "state": self.sec_state, "timer": self.sec_state_timer,
+            "shot_cooldown": self.secondary_shot_cooldown,
         }
 
     def _spawn_projectiles(self, weapon, mx, my):
@@ -230,7 +253,6 @@ class Player:
     def render(self, display):
         display.blit(self.curr_image, (self.position_x, self.position_y))
         if self.has_shield:
-            import math
             cx = int(self.position_x) + self.curr_image.get_width() // 2
             cy = int(self.position_y) + self.curr_image.get_height() // 2
             r = max(self.curr_image.get_width(), self.curr_image.get_height()) // 2 + 6
@@ -247,14 +269,16 @@ class Player:
         self.last_frame_update += delta_time
         if direction_x or direction_y:
             self.curr_anim_list = self.flames
+            self.curr_masks = self.flames_masks
         else:
             self.curr_anim_list = self.stationary
+            self.curr_masks = self.stationary_masks
 
         if self.last_frame_update > 0.15:
             self.last_frame_update = 0
             self.current_frame = (self.current_frame + 1) % len(self.curr_anim_list)
             self.curr_image = self.curr_anim_list[self.current_frame]
-            self.mask = pygame.mask.from_surface(self.curr_image)
+            self.mask = self.curr_masks[self.current_frame]
 
     def load_sprites(self):
         self.sprite_dir = os.path.join(self.game.sprite_dir, "ship")

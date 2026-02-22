@@ -11,8 +11,8 @@ class Game:
     def __init__(self) -> None:
         pygame.init()
         self.GAME_WIDTH, self.GAME_HEIGHT = 1280, 600
-        self.game_canvas = pygame.Surface((self.GAME_WIDTH, self.GAME_HEIGHT))
         self.screen = pygame.display.set_mode((self.GAME_WIDTH, self.GAME_HEIGHT))
+        self.game_canvas = self.screen
         pygame.display.set_caption("Friends on Fire!")
         self.running, self.playing = True, True
         self.actions = {
@@ -121,7 +121,6 @@ class Game:
             if gw and gw.boss and gw.boss.alive_flag:
                 gw.boss.draw(self.game_canvas)
 
-        self.screen.blit(self.game_canvas, (0, 0))
         pygame.display.flip()
 
     def is_gameplay_active(self):
@@ -132,7 +131,11 @@ class Game:
         self.delta_time = self.clock.tick(60) / 1000.0
 
     def draw_text(self, surface, text, color, x, y):
-        text_surface = self.font.render(text, True, color)
+        key = (text, color, 30)
+        text_surface = self._text_cache.get(key)
+        if text_surface is None:
+            text_surface = self.font.render(text, True, color)
+            self._text_cache[key] = text_surface
         text_rect = text_surface.get_rect()
         text_rect.center = (x, y)
         surface.blit(text_surface, text_rect)
@@ -145,7 +148,11 @@ class Game:
         return font
 
     def draw_text_sized(self, surface, text, color, x, y, size):
-        text_surface = self.get_font(size).render(text, True, color)
+        key = (text, color, size)
+        text_surface = self._text_cache.get(key)
+        if text_surface is None:
+            text_surface = self.get_font(size).render(text, True, color)
+            self._text_cache[key] = text_surface
         text_rect = text_surface.get_rect()
         text_rect.center = (x, y)
         surface.blit(text_surface, text_rect)
@@ -154,7 +161,11 @@ class Game:
         self.assets_dir = os.path.join(BASE_DIR, "assets")
         self.sprite_dir = os.path.join(self.assets_dir, "sprites")
         self.sound_dir = os.path.join(self.assets_dir, "sounds")
+        self.background = pygame.image.load(
+            os.path.join(self.assets_dir, "bg.jpeg")
+        ).convert()
         self._font_cache = {}
+        self._text_cache = {}
         self.font = self.get_font(30)
         self.load_sounds()
 
