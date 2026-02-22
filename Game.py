@@ -4,7 +4,23 @@ from objects.Player import Player
 
 BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 SCORES_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scores.json")
+CONTROLS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "controls.json")
 MAX_SCORES = 10
+
+BINDABLE_ACTIONS = [
+    ("left", "Move Left"),
+    ("right", "Move Right"),
+    ("up", "Move Up"),
+    ("down", "Move Down"),
+    ("fire", "Fire"),
+    ("secondary", "Secondary Weapon"),
+    ("cycle_weapon", "Cycle Weapon"),
+]
+
+RESERVED_KEYS = {
+    pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN,
+    pygame.K_RETURN, pygame.K_ESCAPE,
+}
 
 
 class Game:
@@ -29,12 +45,15 @@ class Game:
             "cycle_weapon": False,
             "toggle_autofire": False,
         }
+        self.last_keydown = None
         self.delta_time = 0
         self.paused = False
         self.active_game_world = None
         self.state_stack = []
         self.clock = pygame.time.Clock()
         self.load_assets()
+        self.bindings = self._load_bindings()
+        self._build_key_maps()
         self.load_states()
         self.projectiles = pygame.sprite.Group()
         self.rocks = pygame.sprite.Group()
@@ -50,56 +69,18 @@ class Game:
             self.render()
 
     def get_events(self):
+        self.last_keydown = None
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.playing = False
                 self.running = False
             if event.type == pygame.KEYDOWN:
-                if event.key in (pygame.K_a, pygame.K_LEFT):
-                    self.actions["left"] = True
-                if event.key in (pygame.K_d, pygame.K_RIGHT):
-                    self.actions["right"] = True
-                if event.key in (pygame.K_w, pygame.K_UP):
-                    self.actions["up"] = True
-                if event.key in (pygame.K_s, pygame.K_DOWN):
-                    self.actions["down"] = True
-                if event.key == pygame.K_p:
-                    self.actions["action1"] = True
-                if event.key == pygame.K_o:
-                    self.actions["action2"] = True
-                if event.key == pygame.K_RETURN:
-                    self.actions["start"] = True
-                if event.key == pygame.K_SPACE:
-                    self.actions["space"] = True
-                    self.actions["toggle_autofire"] = True
-                if event.key == pygame.K_ESCAPE:
-                    self.actions["escape"] = True
-                if event.key in (pygame.K_LSHIFT, pygame.K_e):
-                    self.actions["secondary"] = True
-                if event.key == pygame.K_q:
-                    self.actions["cycle_weapon"] = True
-
+                self.last_keydown = event.key
+                for action in self._key_down_map.get(event.key, ()):
+                    self.actions[action] = True
             if event.type == pygame.KEYUP:
-                if event.key in (pygame.K_a, pygame.K_LEFT):
-                    self.actions["left"] = False
-                if event.key in (pygame.K_d, pygame.K_RIGHT):
-                    self.actions["right"] = False
-                if event.key in (pygame.K_w, pygame.K_UP):
-                    self.actions["up"] = False
-                if event.key in (pygame.K_s, pygame.K_DOWN):
-                    self.actions["down"] = False
-                if event.key == pygame.K_p:
-                    self.actions["action1"] = False
-                if event.key == pygame.K_o:
-                    self.actions["action2"] = False
-                if event.key == pygame.K_RETURN:
-                    self.actions["start"] = False
-                if event.key == pygame.K_SPACE:
-                    self.actions["space"] = False
-                if event.key == pygame.K_ESCAPE:
-                    self.actions["escape"] = False
-                if event.key in (pygame.K_LSHIFT, pygame.K_e):
-                    self.actions["secondary"] = False
+                for action in self._key_up_map.get(event.key, ()):
+                    self.actions[action] = False
 
     def update(self):
         self.state_stack[-1].update(self.delta_time, self.actions)
@@ -283,6 +264,73 @@ class Game:
 
     def stop_all_sounds(self):
         pygame.mixer.stop()
+
+    @staticmethod
+    def default_bindings():
+        return {
+            "left": [pygame.K_a],
+            "right": [pygame.K_d],
+            "up": [pygame.K_w],
+            "down": [pygame.K_s],
+            "fire": [pygame.K_SPACE],
+            "secondary": [pygame.K_LSHIFT, pygame.K_e],
+            "cycle_weapon": [pygame.K_q],
+        }
+
+    def _build_key_maps(self):
+        """Build reverse key->action lookup tables from current bindings."""
+        down, up = {}, {}
+        for action, keys in self.bindings.items():
+            for key in keys:
+                if action == "fire":
+                    down.setdefault(key, []).append("space")
+                    down.setdefault(key, []).append("toggle_autofire")
+                    up.setdefault(key, []).append("space")
+                elif action == "cycle_weapon":
+                    down.setdefault(key, []).append("cycle_weapon")
+                else:
+                    down.setdefault(key, []).append(action)
+                    up.setdefault(key, []).append(action)
+        for key, action in [
+            (pygame.K_LEFT, "left"), (pygame.K_RIGHT, "right"),
+            (pygame.K_UP, "up"), (pygame.K_DOWN, "down"),
+            (pygame.K_RETURN, "start"), (pygame.K_ESCAPE, "escape"),
+        ]:
+            down.setdefault(key, []).append(action)
+            up.setdefault(key, []).append(action)
+        self._key_down_map = down
+        self._key_up_map = up
+
+    def _load_bindings(self):
+        defaults = self.default_bindings()
+        if os.path.exists(CONTROLS_FILE):
+            try:
+                with open(CONTROLS_FILE, "r") as f:
+                    data = json.load(f)
+                bindings = {}
+                for action, key_names in data.items():
+                    if action in defaults:
+                        bindings[action] = [
+                            pygame.key.key_code(n) for n in key_names
+                        ]
+                for action, keys in defaults.items():
+                    if action not in bindings:
+                        bindings[action] = list(keys)
+                return bindings
+            except (json.JSONDecodeError, IOError, ValueError):
+                pass
+        return defaults
+
+    def save_bindings(self):
+        data = {
+            action: [pygame.key.name(k) for k in keys]
+            for action, keys in self.bindings.items()
+        }
+        try:
+            with open(CONTROLS_FILE, "w") as f:
+                json.dump(data, f)
+        except IOError:
+            pass
 
     def load_states(self):
         self.title_screen = Title(self)

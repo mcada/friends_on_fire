@@ -2,7 +2,7 @@ import pygame
 from states.state import State
 
 
-MENU_ITEMS = ["New Game", "Scoreboard", "Exit"]
+MENU_ITEMS = ["New Game", "Controls", "Scoreboard", "Exit"]
 
 
 class Title(State):
@@ -32,6 +32,10 @@ class Title(State):
         if label == "New Game":
             from states.level_select import LevelSelect
             new_state = LevelSelect(self.game)
+            new_state.enter_state()
+        elif label == "Controls":
+            from states.controls import Controls
+            new_state = Controls(self.game)
             new_state.enter_state()
         elif label == "Scoreboard":
             from states.scoreboard import Scoreboard
