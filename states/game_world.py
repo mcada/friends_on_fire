@@ -4,6 +4,7 @@ from states.pause_menu import PauseMenu
 from objects.Rocks import Rock, BASIC, CLUSTER, IRON
 from objects.Pickup import UpgradePickup, ShieldPickup
 from objects.Weapon import StraightCannon, SECONDARY_WEAPONS
+from objects.Boss import Boss, BossProjectile, BOSS_BASE_HP
 
 BASE_UPGRADE_CHANCE = 0.07
 UPGRADE_CHANCE_DECAY = 0.35
@@ -12,7 +13,7 @@ PRIMARY_PICKUP_WEIGHT = 0.4
 SHIELD_BASE_CHANCE = 0.02
 SHIELD_PITY_FACTOR = 15
 
-LEVEL_DURATION = 60.0
+LEVEL_DURATION = 120.0
 
 
 class Particle:
@@ -65,6 +66,12 @@ class Game_World(State):
 
         self.kills_since_shield = 0
         self.total_kills_ever = 0
+
+        self.boss = None
+        self.boss_phase = False
+        self.boss_encounter = 0
+        self.next_boss_time = LEVEL_DURATION
+        self._boss_challenge_started = False
 
         self.game.rocks.empty()
         self.game.projectiles.empty()
@@ -217,6 +224,132 @@ class Game_World(State):
             return True
         return random.random() < self._shield_chance()
 
+    # ---- boss helpers ----
+
+    def _should_spawn_boss(self):
+        if self.game_mode == "boss_challenge":
+            return not self._boss_challenge_started
+        if self.game_mode == "level":
+            return self.elapsed_time >= LEVEL_DURATION
+        return self.elapsed_time >= self.next_boss_time
+
+    def _boss_attack_level(self):
+        if self.game_mode == "boss_challenge":
+            return 4
+        if self.game_mode == "level":
+            return self.level_num
+        return min(self.boss_encounter + 1, 4)
+
+    def _boss_hp(self):
+        if self.game_mode == "boss_challenge":
+            return BOSS_BASE_HP + 3 * 10
+        if self.game_mode == "level":
+            return BOSS_BASE_HP + (self.level_num - 1) * 10
+        return BOSS_BASE_HP + self.boss_encounter * 15
+
+    def _start_boss(self):
+        self.boss_phase = True
+        self._boss_challenge_started = True
+        for rock in list(self.game.rocks):
+            rock.kill()
+        self.boss = Boss(self.game,
+                         attack_level=self._boss_attack_level(),
+                         hp_override=self._boss_hp())
+
+    def _on_boss_defeated(self):
+        self.spawn_particles(self.boss.rect.centerx, self.boss.rect.centery, count=30)
+        self.game.play_sound("explosion")
+        self.boss.boss_projectiles.empty()
+        self.boss = None
+        self.boss_phase = False
+        self.boss_encounter += 1
+        if self.game_mode in ("level", "boss_challenge"):
+            self.level_won = True
+            self.game.reset_keys()
+            self.game.stop_music()
+        else:
+            self.next_boss_time = self.elapsed_time + LEVEL_DURATION
+            self.game.play_music("game")
+
+    def _update_boss_combat(self):
+        if not self.boss or not self.boss.alive_flag:
+            return
+
+        # Player projectiles vs boss (play hit sound at most once per frame)
+        normal_group = pygame.sprite.Group()
+        piercing_group = pygame.sprite.Group()
+        for p in self.game.projectiles:
+            (piercing_group if p.piercing else normal_group).add(p)
+
+        boss_hit_this_frame = False
+        for proj in list(normal_group):
+            offset = (self.boss.rect.x - proj.rect.x, self.boss.rect.y - proj.rect.y)
+            if proj.mask.overlap(self.boss.mask, offset):
+                if self.boss.take_damage(1):
+                    boss_hit_this_frame = True
+                proj.kill()
+
+        for proj in list(piercing_group):
+            offset = (self.boss.rect.x - proj.rect.x, self.boss.rect.y - proj.rect.y)
+            if proj.mask.overlap(self.boss.mask, offset):
+                if self.boss.take_damage(1):
+                    boss_hit_this_frame = True
+
+        if boss_hit_this_frame:
+            self.game.play_sound("explosion")
+
+        # Player projectiles vs destroyable boss projectiles
+        destroyable = pygame.sprite.Group(
+            [bp for bp in self.boss.boss_projectiles if bp.destroyable]
+        )
+        pygame.sprite.groupcollide(
+            self.game.projectiles, destroyable, True, True,
+            collided=pygame.sprite.collide_mask,
+        )
+
+        # Boss projectiles vs player
+        player = self.game.player
+        px, py = int(player.position_x), int(player.position_y)
+        for bp in list(self.boss.boss_projectiles):
+            offset = (bp.rect.x - px, bp.rect.y - py)
+            if player.mask.overlap(bp.mask, offset):
+                if player.has_shield:
+                    player.has_shield = False
+                    player.shield_flash = 30
+                    self.upgrade_msg = "Shield broken!"
+                    self.upgrade_msg_timer = 1.5
+                    bp.kill()
+                    continue
+                self._trigger_death()
+                return
+
+        # Boss body vs player
+        offset = (self.boss.rect.x - px, self.boss.rect.y - py)
+        if player.mask.overlap(self.boss.mask, offset):
+            if player.has_shield:
+                player.has_shield = False
+                player.shield_flash = 30
+                self.upgrade_msg = "Shield broken!"
+                self.upgrade_msg_timer = 1.5
+            else:
+                self._trigger_death()
+
+    def _trigger_death(self):
+        self.game_over = True
+        self.game.reset_keys()
+        self.spawn_particles(
+            int(self.game.player.position_x) + 40,
+            int(self.game.player.position_y) + 17, count=15,
+        )
+        self.game.play_sound("death")
+        self.game.stop_music()
+        self.game.save_score(round(self.elapsed_time), self.asteroids_killed)
+        self.is_new_record = (
+            self.game.high_scores
+            and self.game.high_scores[0]["kills"] == self.asteroids_killed
+            and self.game.high_scores[0]["time"] == round(self.elapsed_time)
+        )
+
     # ---- particles ----
 
     def spawn_particles(self, x, y, count=8):
@@ -250,25 +383,30 @@ class Game_World(State):
 
         self.elapsed_time += delta_time
 
-        # Level win check
-        if (self.game_mode == "level" and not self.level_won
-                and self.elapsed_time >= LEVEL_DURATION):
-            self.level_won = True
-            self.game.reset_keys()
-            self.game.stop_music()
-            return
+        # Boss spawning trigger
+        if not self.boss_phase and not self.boss and self._should_spawn_boss():
+            self._start_boss()
 
-        # Rock spawning
-        self.rock_spawn_timer += delta_time
-        if self.rock_spawn_timer >= self.rock_spawn_interval:
-            self.rock_spawn_timer = 0
-            cap = self._max_rocks()
-            batch = self._spawn_batch()
-            for _ in range(batch):
-                if len(self.game.rocks) < cap:
-                    self._spawn_asteroid()
-            self.rock_spawn_interval = max(self._min_spawn_interval(),
-                                           self.rock_spawn_interval - self._spawn_decay())
+        # Boss phase update
+        if self.boss:
+            self.boss.update(delta_time)
+            self._update_boss_combat()
+            if not self.boss.alive_flag:
+                self._on_boss_defeated()
+                return
+
+        # Rock spawning (paused during boss and boss_challenge)
+        if not self.boss_phase and self.game_mode != "boss_challenge":
+            self.rock_spawn_timer += delta_time
+            if self.rock_spawn_timer >= self.rock_spawn_interval:
+                self.rock_spawn_timer = 0
+                cap = self._max_rocks()
+                batch = self._spawn_batch()
+                for _ in range(batch):
+                    if len(self.game.rocks) < cap:
+                        self._spawn_asteroid()
+                self.rock_spawn_interval = max(self._min_spawn_interval(),
+                                               self.rock_spawn_interval - self._spawn_decay())
 
         self.game.rocks.update()
 
@@ -354,17 +492,7 @@ class Game_World(State):
                     self.upgrade_msg = "Shield broken!"
                     self.upgrade_msg_timer = 1.5
                     continue
-                self.game_over = True
-                self.game.reset_keys()
-                self.spawn_particles(rock.rect.centerx, rock.rect.centery, count=15)
-                self.game.play_sound("death")
-                self.game.stop_music()
-                self.game.save_score(round(self.elapsed_time), self.asteroids_killed)
-                self.is_new_record = (
-                    self.game.high_scores
-                    and self.game.high_scores[0]["kills"] == self.asteroids_killed
-                    and self.game.high_scores[0]["time"] == round(self.elapsed_time)
-                )
+                self._trigger_death()
                 break
 
     # ---- rendering ----
@@ -382,7 +510,13 @@ class Game_World(State):
         for p in self.particles:
             p.draw(display)
 
-        if self.game_mode == "level":
+        if self.boss_phase:
+            self.game.draw_text(
+                display, "BOSS FIGHT!",
+                (255, 60, 60),
+                self.game.GAME_WIDTH - 100, 20,
+            )
+        elif self.game_mode == "level":
             remaining = max(0, LEVEL_DURATION - self.elapsed_time)
             time_color = (255, 80, 80) if remaining < 10 else "blue"
             self.game.draw_text(
@@ -390,6 +524,14 @@ class Game_World(State):
                 f"Level {self.level_num}  |  {remaining:.1f}s left",
                 time_color,
                 self.game.GAME_WIDTH - 120,
+                20,
+            )
+        elif self.game_mode == "boss_challenge":
+            self.game.draw_text(
+                display,
+                f"Time: {round(self.elapsed_time)} s",
+                "blue",
+                self.game.GAME_WIDTH - 100,
                 20,
             )
         else:
@@ -461,8 +603,12 @@ class Game_World(State):
         if self.level_won:
             cx = self.game.GAME_WIDTH / 2
             cy = self.game.GAME_HEIGHT / 2
+            if self.game_mode == "boss_challenge":
+                win_text = "Boss Defeated!"
+            else:
+                win_text = f"Level {self.level_num} Complete!"
             self.game.draw_text_sized(
-                display, f"Level {self.level_num} Complete!", (60, 255, 60), cx, cy - 50, 48,
+                display, win_text, (60, 255, 60), cx, cy - 50, 48,
             )
             self.game.draw_text(
                 display,

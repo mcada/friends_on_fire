@@ -110,6 +110,10 @@ class Game:
             self.pickups.draw(self.game_canvas)
             self.projectiles.draw(self.game_canvas)
             self.player.render(self.game_canvas)
+            from states.game_world import Game_World
+            gw = next((s for s in self.state_stack if isinstance(s, Game_World)), None)
+            if gw and gw.boss and gw.boss.alive_flag:
+                gw.boss.draw(self.game_canvas)
 
         self.screen.blit(self.game_canvas, (0, 0))
         pygame.display.flip()
@@ -171,6 +175,7 @@ class Game:
         self.music_paths = {
             "menu": os.path.join(self.sound_dir, "menu_music.mp3"),
             "game": os.path.join(self.sound_dir, "game_music.ogg"),
+            "boss": os.path.join(self.sound_dir, "boss_music.wav"),
         }
 
     def play_sound(self, name):
