@@ -59,8 +59,7 @@ class BossProjectile(pygame.sprite.Sprite):
         pygame.draw.line(self.image, (255, 255, 255), (0, center_y), (w - 1, center_y), 1)
 
     def update(self):
-        from states.pause_menu import PauseMenu
-        if isinstance(self.game.state_stack[-1], PauseMenu):
+        if self.game.paused:
             return
         self.rect.x += self.dx
         self.rect.y += self.dy

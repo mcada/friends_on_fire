@@ -1,7 +1,5 @@
 import pygame, os, math
 
-from states.pause_menu import PauseMenu
-
 GLOW_PAD = 6
 
 
@@ -145,8 +143,7 @@ class Projectile(pygame.sprite.Sprite):
             if d < best_dist:
                 best_dist = d
                 target = rock
-        from states.game_world import Game_World
-        gw = next((s for s in self.game.state_stack if isinstance(s, Game_World)), None)
+        gw = self.game.active_game_world
         if gw and gw.boss and gw.boss.alive_flag:
             dx = gw.boss.rect.centerx - cx
             dy = gw.boss.rect.centery - cy
@@ -171,7 +168,7 @@ class Projectile(pygame.sprite.Sprite):
         self.dy = speed * math.sin(current)
 
     def update(self):
-        if isinstance(self.game.state_stack[-1], PauseMenu):
+        if self.game.paused:
             return
         self.age += 1
 

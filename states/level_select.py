@@ -7,6 +7,7 @@ LEVEL_ITEMS = [
     {"label": "Level 2", "mode": "level", "level_num": 2},
     {"label": "Level 3", "mode": "level", "level_num": 3},
     {"label": "Boss Challenge", "mode": "boss_challenge"},
+    {"label": "Testing", "mode": "testing"},
 ]
 
 DESCRIPTIONS = {
@@ -15,6 +16,7 @@ DESCRIPTIONS = {
     "2": "Survive 120 seconds. Harder asteroids.",
     "3": "Survive 120 seconds. Maximum difficulty.",
     "boss_challenge": "Face the boss at full power. No asteroids.",
+    "testing": "Endless mode with all weapons pre-equipped.",
 }
 
 
@@ -77,7 +79,7 @@ class LevelSelect(State):
 
         list_bottom = list_top + list_height
         sel = LEVEL_ITEMS[self.selected]
-        if sel["mode"] in ("endless", "boss_challenge"):
+        if sel["mode"] in ("endless", "boss_challenge", "testing"):
             desc_key = sel["mode"]
         else:
             desc_key = str(sel.get("level_num", ""))

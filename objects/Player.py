@@ -145,8 +145,8 @@ class Player:
 
         should_fire = actions["space"]
         if not should_fire and self.auto_fire:
-            from states.game_world import Game_World
-            should_fire = isinstance(self.game.state_stack[-1], Game_World)
+            should_fire = (self.game.active_game_world is not None
+                           and not self.game.paused)
 
         if should_fire and self.primary_cooldown <= 0:
             muzzle_x = self.position_x + PLAYER_WIDTH
@@ -171,7 +171,7 @@ class Player:
                 self._cycle_secondary()
             actions["cycle_weapon"] = False
 
-        # Tick background cooldowns for non-active weapons
+        # Tick background timers for non-active weapons
         active_cls = type(self.secondary) if self.secondary else None
         for cls, ws in self.sec_weapon_states.items():
             if cls == active_cls:
@@ -181,6 +181,13 @@ class Player:
                 if ws["timer"] <= 0:
                     ws["state"] = SEC_READY
                     ws["timer"] = 0
+            elif ws["state"] == SEC_ACTIVE:
+                ws["timer"] -= dt
+                if ws["timer"] <= 0:
+                    wlevel = self.secondary_levels.get(cls, 1)
+                    cd = max(1.0, SECONDARY_CYCLE - wlevel * SECONDARY_ACTIVE_PER_LEVEL)
+                    ws["state"] = SEC_COOLDOWN
+                    ws["timer"] = cd
 
         if not self.secondary:
             return

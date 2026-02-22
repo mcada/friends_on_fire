@@ -30,6 +30,8 @@ class Game:
             "toggle_autofire": False,
         }
         self.delta_time = 0
+        self.paused = False
+        self.active_game_world = None
         self.state_stack = []
         self.clock = pygame.time.Clock()
         self.load_assets()
@@ -115,8 +117,7 @@ class Game:
             self.pickups.draw(self.game_canvas)
             self.projectiles.draw(self.game_canvas)
             self.player.render(self.game_canvas)
-            from states.game_world import Game_World
-            gw = next((s for s in self.state_stack if isinstance(s, Game_World)), None)
+            gw = self.active_game_world
             if gw and gw.boss and gw.boss.alive_flag:
                 gw.boss.draw(self.game_canvas)
 
@@ -124,11 +125,8 @@ class Game:
         pygame.display.flip()
 
     def is_gameplay_active(self):
-        from states.game_world import Game_World
-        for s in self.state_stack:
-            if isinstance(s, Game_World):
-                return not s.game_over and not s.level_won
-        return False
+        gw = self.active_game_world
+        return gw is not None and not gw.game_over and not gw.level_won
 
     def get_delta_time(self):
         self.delta_time = self.clock.tick(60) / 1000.0
@@ -302,6 +300,8 @@ class Game:
         self.rocks.empty()
         self.projectiles.empty()
         self.pickups.empty()
+        self.active_game_world = None
+        self.paused = False
         while len(self.state_stack) > 1:
             self.state_stack.pop()
         self.play_music("menu")

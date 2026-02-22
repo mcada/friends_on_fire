@@ -1,6 +1,5 @@
 import pygame, os, random, math
 from states.state import State
-from states.pause_menu import PauseMenu
 from objects.Rocks import Rock, BASIC, CLUSTER, IRON
 from objects.Pickup import UpgradePickup, ShieldPickup
 from objects.Weapon import StraightCannon, SECONDARY_WEAPONS
@@ -47,6 +46,7 @@ class Particle:
 class Game_World(State):
     def __init__(self, game, game_mode="endless", level_num=0):
         State.__init__(self, game)
+        self.game.active_game_world = self
         self.game_mode = game_mode
         self.level_num = level_num
         self.background = pygame.image.load(
@@ -90,6 +90,12 @@ class Game_World(State):
         player.auto_fire = False
         player.has_shield = False
         player.shield_flash = 0
+
+        if self.game_mode == "testing":
+            for weapon_cls in SECONDARY_WEAPONS:
+                player.set_secondary(weapon_cls)
+            player.has_shield = True
+
         player._build_sprites()
         self.game.play_music("game")
 
@@ -391,8 +397,8 @@ class Game_World(State):
 
         if actions["start"] or actions["escape"]:
             self.game.stop_all_sounds()
-            new_state = PauseMenu(self.game)
-            new_state.enter_state()
+            from states.pause_menu import PauseMenu
+            PauseMenu(self.game).enter_state()
             return
 
         self.elapsed_time += delta_time
@@ -548,11 +554,19 @@ class Game_World(State):
                 pygame.draw.rect(clip, (255, 255, 255, 255), (0, fill_y, sz, fill_h))
                 colored.blit(clip, (0, 0), special_flags=pygame.BLEND_RGBA_MIN)
                 icon.blit(colored, (0, 0))
+        elif glowing:
+            t = pygame.time.get_ticks() / 1000
+            pulse = 0.55 + 0.45 * math.sin(t * 8)
+            bg_alpha = int(160 + 80 * pulse)
+            pygame.draw.rect(icon, (r, g, b, bg_alpha), (0, 0, sz, sz), border_radius=rd)
+            flash = pygame.Surface((sz, sz), pygame.SRCALPHA)
+            pygame.draw.rect(flash, (255, 255, 255, int(50 * pulse)),
+                             (0, 0, sz, sz), border_radius=rd)
+            icon.blit(flash, (0, 0))
         else:
             alpha = 140 if not greyed else 70
             pygame.draw.rect(icon, (r, g, b, alpha), (0, 0, sz, sz), border_radius=rd)
 
-        # Weapon symbol in top portion
         self._draw_weapon_symbol(icon, weapon, sz)
 
         # Level stars along the bottom
@@ -572,19 +586,29 @@ class Game_World(State):
         # Border
         if glowing:
             t = pygame.time.get_ticks() / 1000
-            pulse = 0.6 + 0.4 * math.sin(t * 6)
-            border_alpha = int(200 * pulse)
-            border_col = (min(255, r + 80), min(255, g + 80), min(255, b + 80), border_alpha)
-            pygame.draw.rect(icon, border_col, (0, 0, sz, sz), 3, border_radius=rd)
-            glow = pygame.Surface((sz + 10, sz + 10), pygame.SRCALPHA)
-            pygame.draw.rect(glow, (r, g, b, int(50 * pulse)),
-                             (0, 0, sz + 10, sz + 10), border_radius=rd + 3)
-            display.blit(glow, (x - 5, y - 5))
+            pulse = 0.55 + 0.45 * math.sin(t * 8)
+            bright = (min(255, r + 100), min(255, g + 100), min(255, b + 100))
+            pygame.draw.rect(icon, (*bright, int(220 * pulse)),
+                             (0, 0, sz, sz), 3, border_radius=rd)
+            glow = pygame.Surface((sz + 14, sz + 14), pygame.SRCALPHA)
+            pygame.draw.rect(glow, (r, g, b, int(70 * pulse)),
+                             (0, 0, sz + 14, sz + 14), border_radius=rd + 4)
+            display.blit(glow, (x - 7, y - 7))
         else:
             border_col = (160, 160, 170, 200) if not greyed else (90, 90, 95, 180)
             pygame.draw.rect(icon, border_col, (0, 0, sz, sz), 2, border_radius=rd)
 
         display.blit(icon, (x, y))
+
+    def _draw_state_label(self, display, x, y, label, color):
+        """Draw a small state label centered below an icon."""
+        font = self.game.get_font(11)
+        shadow = font.render(label, True, (0, 0, 0))
+        txt = font.render(label, True, color)
+        tx = x + self.ICON_SIZE // 2 - txt.get_width() // 2
+        ty = y + self.ICON_SIZE + 2
+        display.blit(shadow, (tx + 1, ty + 1))
+        display.blit(txt, (tx, ty))
 
     def _draw_weapon_symbol(self, surface, weapon, sz):
         from objects.Weapon import StraightCannon, SpreadShot, LaserCannon, HomingMissile
@@ -772,12 +796,18 @@ class Game_World(State):
                                         SECONDARY_CYCLE, SECONDARY_ACTIVE_PER_LEVEL)
             first_sec_x = ix
             for weapon_cls in player.secondary_inventory:
-                is_active = player.secondary and type(player.secondary) is weapon_cls
-                if is_active:
+                is_selected = player.secondary and type(player.secondary) is weapon_cls
+                if is_selected:
                     sec = player.secondary
+                    sec_color = pygame.Color(sec.color)
                     if player.sec_state == SEC_ACTIVE:
                         self._draw_weapon_icon(display, ix, hud_y, sec,
                                                fill_ratio=1.0, glowing=True)
+                        self._draw_state_label(display, ix, hud_y,
+                                               "FIRING",
+                                               (min(255, sec_color.r + 100),
+                                                min(255, sec_color.g + 100),
+                                                min(255, sec_color.b + 100)))
                     elif player.sec_state == SEC_COOLDOWN:
                         total_cd = player._sec_cooldown_duration()
                         elapsed_cd = total_cd - player.sec_state_timer
@@ -789,17 +819,19 @@ class Game_World(State):
                                                 sec.color)
                         self._draw_cooldown_text(display, ix, hud_y,
                                                  player.sec_state_timer)
+                        self._draw_state_label(display, ix, bar_y + 6,
+                                               f"{player.sec_state_timer:.1f}s",
+                                               (255, 160, 60))
                     else:
                         self._draw_weapon_icon(display, ix, hud_y, sec, fill_ratio=1.0)
+                        self._draw_state_label(display, ix, hud_y,
+                                               "READY", (80, 255, 80))
                     if len(player.secondary_inventory) > 1:
                         acx = ix + self.ICON_SIZE // 2
-                        acy = hud_y + self.ICON_SIZE + 2
-                        if player.sec_state == SEC_COOLDOWN:
-                            acy += 8
                         pygame.draw.polygon(display, (255, 255, 100),
-                                            [(acx - 4, acy + 5),
-                                             (acx + 4, acy + 5),
-                                             (acx, acy)])
+                                            [(acx - 4, hud_y - 2),
+                                             (acx + 4, hud_y - 2),
+                                             (acx, hud_y - 7)])
                 else:
                     tmp = weapon_cls()
                     tmp.level = player.secondary_levels.get(weapon_cls, 1)
@@ -815,10 +847,20 @@ class Game_World(State):
                                                fill_ratio=ratio, greyed=True)
                         bar_y = hud_y + self.ICON_SIZE + 2
                         self._draw_cooldown_bar(display, ix, bar_y, ratio, tmp.color)
-                        self._draw_cooldown_text(display, ix, hud_y, ws["timer"])
+                        self._draw_state_label(display, ix, bar_y + 6,
+                                               f"{ws['timer']:.1f}s",
+                                               (180, 120, 50))
+                    elif ws["state"] == SEC_ACTIVE:
+                        self._draw_weapon_icon(display, ix, hud_y, tmp,
+                                               fill_ratio=1.0, greyed=False)
+                        self._draw_state_label(display, ix, hud_y,
+                                               "ACTIVE",
+                                               (255, 200, 60))
                     else:
                         self._draw_weapon_icon(display, ix, hud_y, tmp,
                                                fill_ratio=1.0, greyed=True)
+                        self._draw_state_label(display, ix, hud_y,
+                                               "READY", (60, 160, 60))
                 ix += step
 
             # Secondary key hints

@@ -10,6 +10,7 @@ class PauseMenu(State):
         self.game.reset_keys()
         State.__init__(self, game)
         pygame.mixer.music.pause()
+        self.game.paused = True
         self.selected = 0
 
     def update(self, delta_time, actions):
@@ -35,6 +36,7 @@ class PauseMenu(State):
     def _resume(self):
         self.game.get_events()
         pygame.mixer.music.unpause()
+        self.game.paused = False
         self.game.state_stack.pop()
 
     def render(self, display):

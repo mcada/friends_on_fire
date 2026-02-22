@@ -130,8 +130,7 @@ class SpreadShot(Weapon):
     @staticmethod
     def _find_targets(x, y, game):
         targets = [r for r in game.rocks if r.rect.centerx > x - 50]
-        from states.game_world import Game_World
-        gw = next((s for s in game.state_stack if isinstance(s, Game_World)), None)
+        gw = game.active_game_world
         if gw and gw.boss and gw.boss.alive_flag:
             targets.append(gw.boss)
         return targets

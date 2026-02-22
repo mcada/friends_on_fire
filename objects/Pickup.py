@@ -1,6 +1,5 @@
 import pygame, math
 
-from states.pause_menu import PauseMenu
 from objects.Player import PLAYER_CENTER_OFFSET_X, PLAYER_CENTER_OFFSET_Y
 
 PRIMARY_UPGRADE_COLOR = (255, 210, 60)
@@ -23,7 +22,7 @@ class _BasePickup(pygame.sprite.Sprite):
         self.rect = self.image.get_rect(center=(x, y))
 
     def update(self):
-        if isinstance(self.game.state_stack[-1], PauseMenu):
+        if self.game.paused:
             return
         self.age += 1
         self.fx -= 1.5

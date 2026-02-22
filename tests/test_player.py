@@ -250,3 +250,101 @@ def test_secondary_mask_updates(game):
     base_count = p.mask.count()
     p.set_secondary(SpreadShot)
     assert p.mask.count() > base_count
+
+
+# ---- weapon cycling + background state ticking ----
+
+def _equip_two_weapons(game):
+    """Helper: equip SpreadShot then LaserCannon, ending with Laser selected."""
+    p = game.player
+    p.set_secondary(SpreadShot)
+    p.set_secondary(LaserCannon)
+    return p
+
+
+def test_cycle_saves_active_state(game, actions):
+    """Cycling away from a firing weapon saves SEC_ACTIVE in sec_weapon_states."""
+    p = game.player
+    p.set_secondary(SpreadShot)
+    p.set_secondary(LaserCannon)
+
+    p._cycle_secondary()
+    assert isinstance(p.secondary, SpreadShot)
+
+    actions["secondary"] = True
+    p.update(0.01, actions)
+    assert p.sec_state == SEC_ACTIVE
+    actions["secondary"] = False
+
+    p._cycle_secondary()
+    assert isinstance(p.secondary, LaserCannon)
+
+    saved = p.sec_weapon_states[SpreadShot]
+    assert saved["state"] == SEC_ACTIVE
+    assert saved["timer"] > 0
+
+
+def test_background_active_timer_ticks_down(game, actions):
+    """A non-selected weapon in SEC_ACTIVE has its timer decreased each frame."""
+    p = _equip_two_weapons(game)
+    p._cycle_secondary()
+    assert isinstance(p.secondary, SpreadShot)
+
+    actions["secondary"] = True
+    p.update(0.01, actions)
+    actions["secondary"] = False
+
+    p._cycle_secondary()
+    assert isinstance(p.secondary, LaserCannon)
+    timer_before = p.sec_weapon_states[SpreadShot]["timer"]
+
+    p.update(0.5, actions)
+    timer_after = p.sec_weapon_states[SpreadShot]["timer"]
+    assert timer_after < timer_before
+
+
+def test_background_active_transitions_to_cooldown(game, actions):
+    """A non-selected weapon's SEC_ACTIVE expires into SEC_COOLDOWN."""
+    p = _equip_two_weapons(game)
+    p._cycle_secondary()
+    assert isinstance(p.secondary, SpreadShot)
+
+    actions["secondary"] = True
+    p.update(0.01, actions)
+    actions["secondary"] = False
+
+    active_dur = p._sec_active_duration()
+
+    p._cycle_secondary()
+    assert isinstance(p.secondary, LaserCannon)
+    assert p.sec_weapon_states[SpreadShot]["state"] == SEC_ACTIVE
+
+    p.update(active_dur + 1.0, actions)
+    assert p.sec_weapon_states[SpreadShot]["state"] == SEC_COOLDOWN
+    assert p.sec_weapon_states[SpreadShot]["timer"] > 0
+
+
+def test_background_cooldown_reaches_ready(game, actions):
+    """A non-selected weapon transitions ACTIVE -> COOLDOWN -> READY."""
+    p = _equip_two_weapons(game)
+    p._cycle_secondary()
+
+    actions["secondary"] = True
+    p.update(0.01, actions)
+    actions["secondary"] = False
+
+    p._cycle_secondary()
+
+    p.update(SECONDARY_CYCLE + 1.0, actions)
+    p.update(SECONDARY_CYCLE + 1.0, actions)
+    assert p.sec_weapon_states[SpreadShot]["state"] == SEC_READY
+
+
+def test_non_selected_ready_stays_ready(game, actions):
+    """A non-selected weapon in SEC_READY stays SEC_READY after ticking."""
+    p = _equip_two_weapons(game)
+    assert p.sec_weapon_states.get(SpreadShot, {}).get("state") == SEC_READY
+
+    p.update(1.0, actions)
+    ws = p.sec_weapon_states.get(SpreadShot, {"state": SEC_READY})
+    assert ws["state"] == SEC_READY
