@@ -1,6 +1,7 @@
 import pygame, math
 
 from states.pause_menu import PauseMenu
+from objects.Player import PLAYER_CENTER_OFFSET_X, PLAYER_CENTER_OFFSET_Y
 
 PRIMARY_UPGRADE_COLOR = (255, 210, 60)
 SHIELD_COLOR = (80, 180, 255)
@@ -27,8 +28,8 @@ class _BasePickup(pygame.sprite.Sprite):
         self.age += 1
         self.fx -= 1.5
 
-        px = self.game.player.position_x + 40
-        py = self.game.player.position_y + 17
+        px = self.game.player.position_x + PLAYER_CENTER_OFFSET_X
+        py = self.game.player.position_y + PLAYER_CENTER_OFFSET_Y
         dx = px - self.fx
         dy = py - self.fy
         dist = max(1, (dx ** 2 + dy ** 2) ** 0.5)

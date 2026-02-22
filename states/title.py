@@ -10,7 +10,7 @@ class Title(State):
         State.__init__(self, game)
         self.background = pygame.image.load(
             os.path.join(self.game.assets_dir, "bg.jpeg")
-        )
+        ).convert()
         dark = pygame.Surface(self.background.get_size())
         dark.fill((0, 0, 0))
         dark.set_alpha(150)

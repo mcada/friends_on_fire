@@ -139,9 +139,15 @@ class Game:
         text_rect.center = (x, y)
         surface.blit(text_surface, text_rect)
 
+    def get_font(self, size):
+        font = self._font_cache.get(size)
+        if font is None:
+            font = pygame.font.SysFont("comicsans", size)
+            self._font_cache[size] = font
+        return font
+
     def draw_text_sized(self, surface, text, color, x, y, size):
-        font = pygame.font.SysFont("comicsans", size)
-        text_surface = font.render(text, True, color)
+        text_surface = self.get_font(size).render(text, True, color)
         text_rect = text_surface.get_rect()
         text_rect.center = (x, y)
         surface.blit(text_surface, text_rect)
@@ -150,7 +156,8 @@ class Game:
         self.assets_dir = os.path.join(BASE_DIR, "assets")
         self.sprite_dir = os.path.join(self.assets_dir, "sprites")
         self.sound_dir = os.path.join(self.assets_dir, "sounds")
-        self.font = pygame.font.SysFont("comicsans", 30)
+        self._font_cache = {}
+        self.font = self.get_font(30)
         self.load_sounds()
 
     def load_sounds(self):

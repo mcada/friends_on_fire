@@ -2,6 +2,7 @@ import pytest
 import pygame
 from states.game_world import Game_World
 from objects.Rocks import Rock, BASIC, CLUSTER, IRON
+from objects.Player import PLAYER_CENTER_OFFSET_X, PLAYER_CENTER_OFFSET_Y
 
 
 def _enter_game_world(game):
@@ -48,8 +49,8 @@ def test_game_over_on_collision(game):
     gw = _enter_game_world(game)
     p = game.player
     p.position_x, p.position_y = 200, 200
-    center_x = int(p.position_x) + 40
-    center_y = int(p.position_y) + 17
+    center_x = int(p.position_x) + PLAYER_CENTER_OFFSET_X
+    center_y = int(p.position_y) + PLAYER_CENTER_OFFSET_Y
     rock = Rock(center_x, center_y, 45, 35, game)
     game.rocks.add(rock)
     actions = _no_actions()
@@ -101,8 +102,8 @@ def test_high_score_updates(game):
 
     p = game.player
     p.position_x, p.position_y = 200, 200
-    center_x = int(p.position_x) + 40
-    center_y = int(p.position_y) + 17
+    center_x = int(p.position_x) + PLAYER_CENTER_OFFSET_X
+    center_y = int(p.position_y) + PLAYER_CENTER_OFFSET_Y
     rock = Rock(center_x, center_y, 45, 35, game)
     game.rocks.add(rock)
 
@@ -234,8 +235,8 @@ def test_shield_absorbs_hit(game):
     p = game.player
     p.has_shield = True
     p.position_x, p.position_y = 200, 200
-    center_x = int(p.position_x) + 40
-    center_y = int(p.position_y) + 17
+    center_x = int(p.position_x) + PLAYER_CENTER_OFFSET_X
+    center_y = int(p.position_y) + PLAYER_CENTER_OFFSET_Y
     rock = Rock(center_x, center_y, 45, 35, game)
     game.rocks.add(rock)
 
@@ -251,8 +252,8 @@ def test_shield_destroys_rock_on_hit(game):
     p = game.player
     p.has_shield = True
     p.position_x, p.position_y = 200, 200
-    center_x = int(p.position_x) + 40
-    center_y = int(p.position_y) + 17
+    center_x = int(p.position_x) + PLAYER_CENTER_OFFSET_X
+    center_y = int(p.position_y) + PLAYER_CENTER_OFFSET_Y
     rock = Rock(center_x, center_y, 45, 35, game)
     game.rocks.add(rock)
 
@@ -266,8 +267,8 @@ def test_no_shield_means_death(game):
     p = game.player
     p.has_shield = False
     p.position_x, p.position_y = 200, 200
-    center_x = int(p.position_x) + 40
-    center_y = int(p.position_y) + 17
+    center_x = int(p.position_x) + PLAYER_CENTER_OFFSET_X
+    center_y = int(p.position_y) + PLAYER_CENTER_OFFSET_Y
     rock = Rock(center_x, center_y, 45, 35, game)
     game.rocks.add(rock)
 

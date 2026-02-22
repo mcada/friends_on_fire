@@ -1,5 +1,7 @@
 import pygame, os, math, random
 
+from objects.Player import PLAYER_CENTER_OFFSET_X, PLAYER_CENTER_OFFSET_Y
+
 BOSS_WIDTH, BOSS_HEIGHT = 150, 150
 BOSS_BASE_HP = 20
 HIT_COOLDOWN = 0.3
@@ -183,7 +185,8 @@ class Boss(pygame.sprite.Sprite):
 
     def _player_center(self):
         p = self.game.player
-        return p.position_x + 40, p.position_y + 17
+        return (p.position_x + PLAYER_CENTER_OFFSET_X,
+                p.position_y + PLAYER_CENTER_OFFSET_Y)
 
     # -- Tier 1: destroyable projectile patterns --
 

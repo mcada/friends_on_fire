@@ -4,6 +4,8 @@ from objects.Projectile import Projectile
 from objects.Weapon import StraightCannon
 
 PLAYER_WIDTH, PLAYER_HEIGHT = 80, 35
+PLAYER_CENTER_OFFSET_X = PLAYER_WIDTH // 2
+PLAYER_CENTER_OFFSET_Y = PLAYER_HEIGHT // 2
 CANNON_PAD = 10
 
 SECONDARY_CYCLE = 10.0

@@ -5,6 +5,7 @@ from objects.Rocks import Rock, BASIC, CLUSTER, IRON
 from objects.Pickup import UpgradePickup, ShieldPickup
 from objects.Weapon import StraightCannon, SECONDARY_WEAPONS
 from objects.Boss import Boss, BossProjectile, BOSS_BASE_HP
+from objects.Player import PLAYER_CENTER_OFFSET_X, PLAYER_CENTER_OFFSET_Y
 
 BASE_UPGRADE_CHANCE = 0.07
 UPGRADE_CHANCE_DECAY = 0.35
@@ -50,7 +51,7 @@ class Game_World(State):
         self.level_num = level_num
         self.background = pygame.image.load(
             os.path.join(self.game.assets_dir, "bg.jpeg")
-        )
+        ).convert()
         self.elapsed_time = 0
         self.rock_spawn_timer = 0
         self.rock_spawn_interval = 1.0
@@ -349,8 +350,9 @@ class Game_World(State):
         self.game.reset_keys()
         self.game.stop_all_sounds()
         self.spawn_particles(
-            int(self.game.player.position_x) + 40,
-            int(self.game.player.position_y) + 17, count=15,
+            int(self.game.player.position_x) + PLAYER_CENTER_OFFSET_X,
+            int(self.game.player.position_y) + PLAYER_CENTER_OFFSET_Y,
+            count=15,
         )
         self.game.play_sound("death")
         self.game.stop_music()
@@ -679,7 +681,7 @@ class Game_World(State):
 
     def _draw_cooldown_text(self, display, x, y, seconds_left):
         """Draw remaining seconds centered on the icon."""
-        font = pygame.font.SysFont("comicsans", 16)
+        font = self.game.get_font(16)
         txt = font.render(f"{seconds_left:.1f}", True, (255, 255, 255))
         tx = x + self.ICON_SIZE // 2 - txt.get_width() // 2
         ty = y + self.ICON_SIZE // 2 - txt.get_height() // 2
@@ -694,7 +696,7 @@ class Game_World(State):
         pygame.draw.rect(icon, (25, 25, 30, 150), (0, 0, sz, sz), border_radius=rd)
         pygame.draw.rect(icon, (60, 60, 65, 120), (0, 0, sz, sz), 2, border_radius=rd)
         cx, cy = sz // 2, sz // 2
-        font = pygame.font.SysFont("comicsans", 18)
+        font = self.game.get_font(18)
         txt = font.render("?", True, (80, 80, 80))
         icon.blit(txt, (cx - txt.get_width() // 2, cy - txt.get_height() // 2))
         display.blit(icon, (x, y))
@@ -751,7 +753,7 @@ class Game_World(State):
         hud_y = 8
         step = self.ICON_SIZE + self.ICON_PAD
         hint_y = hud_y + self.ICON_SIZE + 18
-        hint_font = pygame.font.SysFont("comicsans", 13)
+        hint_font = self.game.get_font(13)
 
         self._draw_weapon_icon(display, hud_x, hud_y, player.primary,
                                fill_ratio=1.0, glowing=player.auto_fire)
