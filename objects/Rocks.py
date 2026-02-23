@@ -272,5 +272,7 @@ class Rock(pygame.sprite.Sprite):
             self._spin += 0.03
 
         gh = self.game.GAME_HEIGHT
-        if self.rect.right < -30 or self.rect.top > gh + 50 or self.rect.bottom < -50:
+        gw = self.game.GAME_WIDTH
+        if (self.rect.right < -30 or self.rect.left > gw + 250
+                or self.rect.top > gh + 50 or self.rect.bottom < -50):
             self.kill()

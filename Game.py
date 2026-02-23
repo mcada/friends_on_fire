@@ -151,6 +151,8 @@ class Game:
                         self.player_actions[i][action] = False
 
     def update(self):
+        if not self.state_stack:
+            return
         self.state_stack[-1].update(self.delta_time, self.actions)
         if getattr(self.state_stack[-1], "game_over", False):
             return
@@ -162,6 +164,8 @@ class Game:
                 player.update(self.delta_time, self.player_actions[i])
 
     def render(self):
+        if not self.state_stack:
+            return
         self.state_stack[-1].render(self.game_canvas)
 
         if self.is_gameplay_active():
@@ -417,35 +421,36 @@ class Game:
         try:
             with open(CONTROLS_FILE, "r") as f:
                 data = json.load(f)
-        except (json.JSONDecodeError, IOError, ValueError):
+
+            if "player_0" in data:
+                result = []
+                for i in range(MAX_PLAYERS):
+                    pdata = data.get(f"player_{i}", {})
+                    bindings = {}
+                    for action, key_names in pdata.items():
+                        if action in defaults[i]:
+                            bindings[action] = [
+                                pygame.key.key_code(n) for n in key_names
+                            ]
+                    for action, keys in defaults[i].items():
+                        if action not in bindings:
+                            bindings[action] = list(keys)
+                    result.append(bindings)
+                return result
+
+            bindings = {}
+            for action, key_names in data.items():
+                if action in defaults[0]:
+                    bindings[action] = [
+                        pygame.key.key_code(n) for n in key_names
+                    ]
+            for action, keys in defaults[0].items():
+                if action not in bindings:
+                    bindings[action] = list(keys)
+            return [bindings] + defaults[1:]
+        except (json.JSONDecodeError, IOError, ValueError, KeyError,
+                TypeError, AttributeError):
             return defaults
-
-        if "player_0" in data:
-            result = []
-            for i in range(MAX_PLAYERS):
-                pdata = data.get(f"player_{i}", {})
-                bindings = {}
-                for action, key_names in pdata.items():
-                    if action in defaults[i]:
-                        bindings[action] = [
-                            pygame.key.key_code(n) for n in key_names
-                        ]
-                for action, keys in defaults[i].items():
-                    if action not in bindings:
-                        bindings[action] = list(keys)
-                result.append(bindings)
-            return result
-
-        bindings = {}
-        for action, key_names in data.items():
-            if action in defaults[0]:
-                bindings[action] = [
-                    pygame.key.key_code(n) for n in key_names
-                ]
-        for action, keys in defaults[0].items():
-            if action not in bindings:
-                bindings[action] = list(keys)
-        return [bindings] + defaults[1:]
 
     def save_bindings(self):
         data = {}

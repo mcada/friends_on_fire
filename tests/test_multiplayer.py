@@ -94,10 +94,10 @@ def test_dead_player_not_updated(game):
     p2 = game.players[1]
     p2.alive = False
     old_x = p2.position_x
-    actions = _no_actions()
-    actions["right"] = True
-    p2.update(1 / 60, actions)
-    assert p2.position_x > old_x
+    game.player_actions[1]["right"] = True
+    game.delta_time = 1 / 60
+    game.update()
+    assert p2.position_x == old_x
 
 
 # ---- boss resurrection ----

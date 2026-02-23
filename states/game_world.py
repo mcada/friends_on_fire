@@ -4,7 +4,7 @@ from objects.Rocks import Rock, BASIC, CLUSTER, IRON, BLACKHOLE
 from objects.Pickup import UpgradePickup, ShieldPickup
 from objects.Weapon import StraightCannon, SECONDARY_WEAPONS
 from objects.Boss import Boss, BossProjectile, BOSS_BASE_HP
-from objects.Enemy import Drone, Fighter, ENEMY_TYPES
+from objects.Enemy import Drone, Fighter, Striker, ENEMY_TYPES
 from objects.Player import PLAYER_CENTER_OFFSET_X, PLAYER_CENTER_OFFSET_Y, MAX_LIVES
 
 BASE_UPGRADE_CHANCE = 0.07
@@ -18,13 +18,15 @@ SHIELD_PITY_FACTOR = 15
 LEVEL_DURATION = 120.0
 BOSS_COUNTDOWN = 3.0
 
-ENEMY_FIRST_SPAWN = 30.0
-ENEMY_SPAWN_INTERVAL = 12.0
+ENEMY_FIRST_SPAWN = 8.0
+ENEMY_SPAWN_INTERVAL = 10.0
 ENEMY_MIN_INTERVAL = 4.0
 ENEMY_INTERVAL_DECAY = 0.15
 DRONE_MAX = 8
 FIGHTER_MAX = 3
-FIGHTER_UNLOCK_TIME = 55.0
+FIGHTER_UNLOCK_TIME = 35.0
+STRIKER_MAX = 2
+STRIKER_UNLOCK_TIME = 60.0
 
 DRONE_WAVE_CHANCE = 0.35
 
@@ -315,13 +317,13 @@ class Game_World(State):
                     bh.feed(0.3)
 
             for pickup in list(self.game.pickups):
-                dx = bcx - pickup.fx
-                dy = bcy - pickup.fy
+                dx = bcx - pickup._fx
+                dy = bcy - pickup._fy
                 dist = max(1.0, math.hypot(dx, dy))
                 if dist < gr:
                     pull = gs * 0.8 * dt * (1 - dist / gr)
-                    pickup.fx += pull * dx / dist
-                    pickup.base_fy += pull * dy / dist
+                    pickup._fx += pull * dx / dist
+                    pickup._base_fy += pull * dy / dist
                 if dist < eat_r:
                     pickup.kill()
                     bh.feed(0.5)
@@ -468,28 +470,33 @@ class Game_World(State):
     def _count_enemies_by_type(self):
         drones = sum(1 for e in self.game.enemies if isinstance(e, Drone))
         fighters = sum(1 for e in self.game.enemies if isinstance(e, Fighter))
-        return drones, fighters
+        strikers = sum(1 for e in self.game.enemies if isinstance(e, Striker))
+        return drones, fighters, strikers
 
     def _spawn_enemy(self):
-        drones, fighters = self._count_enemies_by_type()
+        drones, fighters, strikers = self._count_enemies_by_type()
 
         can_drone = drones < DRONE_MAX
         can_fighter = (self.elapsed_time >= FIGHTER_UNLOCK_TIME
                        and fighters < FIGHTER_MAX)
+        can_striker = (self.elapsed_time >= STRIKER_UNLOCK_TIME
+                       and strikers < STRIKER_MAX)
 
         if can_drone and random.random() < DRONE_WAVE_CHANCE:
             self._spawn_drone_wave()
             return
 
-        if can_drone and can_fighter:
-            enemy_cls = random.choices([Drone, Fighter], weights=[3, 1])[0]
-        elif can_fighter:
-            enemy_cls = Fighter
-        elif can_drone:
-            enemy_cls = Drone
-        else:
+        candidates, weights = [], []
+        if can_drone:
+            candidates.append(Drone); weights.append(3)
+        if can_fighter:
+            candidates.append(Fighter); weights.append(2)
+        if can_striker:
+            candidates.append(Striker); weights.append(1)
+        if not candidates:
             return
 
+        enemy_cls = random.choices(candidates, weights=weights)[0]
         x = self.game.GAME_WIDTH + 40
         y = random.randint(40, self.game.GAME_HEIGHT - 40)
         self.game.enemies.add(enemy_cls(x, y, self.game))
@@ -647,7 +654,6 @@ class Game_World(State):
                         UpgradePickup(enemy.rect.centerx, enemy.rect.centery,
                                       wtype, self.game)
                     )
-                    self.upgrade_count += 1
                 enemy.kill()
 
         if any(not e.alive_flag for e in enemy_damage):

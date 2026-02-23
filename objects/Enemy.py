@@ -36,7 +36,7 @@ class EnemyProjectile(pygame.sprite.Sprite):
 # Base Enemy — subclass and override _shoot() and movement for new types
 # ---------------------------------------------------------------------------
 
-ENTER_SPEED = 3
+ENTER_SPEED = 5
 
 class Enemy(pygame.sprite.Sprite):
     """Base class for enemy ships. Subclass for different behaviours."""
@@ -167,18 +167,24 @@ class Enemy(pygame.sprite.Sprite):
 # ---------------------------------------------------------------------------
 
 class Fighter(Enemy):
-    """Level-2 enemy that patrols and fires aimed shots at the player."""
+    """Ranged sentry — sits far right and fires aimed shots at players."""
 
     hp = 4
     speed = 80
-    shoot_interval = 2.0
+    shoot_interval = 1.4
     color = (220, 50, 50)
     width = 44
     height = 32
-    projectile_speed = 4.5
+    projectile_speed = 5.5
     projectile_size = 18
     projectile_color = (255, 70, 70)
     score_value = 2
+
+    def _pick_patrol_x(self):
+        return random.randint(
+            int(self.game.GAME_WIDTH * 0.75),
+            int(self.game.GAME_WIDTH * 0.92),
+        )
 
     def _shoot(self):
         cx, cy = self.rect.left, self.rect.centery
@@ -186,6 +192,86 @@ class Fighter(Enemy):
         angle = math.atan2(py - cy, px - cx)
         dx = self.projectile_speed * math.cos(angle)
         dy = self.projectile_speed * math.sin(angle)
+        self.game.enemy_projectiles.add(
+            EnemyProjectile(cx, cy, dx, dy, self.game,
+                            size=self.projectile_size,
+                            color=self.projectile_color)
+        )
+
+
+# ---------------------------------------------------------------------------
+# Striker — aggressive mid-range enemy, patrols closer and fires bursts
+# ---------------------------------------------------------------------------
+
+class Striker(Enemy):
+    """Mid-range aggressor — patrols near the centre and fires quick bursts."""
+
+    hp = 3
+    speed = 100
+    shoot_interval = 1.8
+    color = (180, 50, 200)
+    width = 38
+    height = 28
+    projectile_speed = 5.0
+    projectile_size = 14
+    projectile_color = (220, 100, 255)
+    score_value = 3
+
+    _BURST_COUNT = 2
+    _BURST_GAP = 0.15
+
+    def __init__(self, x, y, game):
+        super().__init__(x, y, game)
+        self._burst_left = 0
+        self._burst_timer = 0.0
+
+    def _pick_patrol_x(self):
+        return random.randint(
+            int(self.game.GAME_WIDTH * 0.45),
+            int(self.game.GAME_WIDTH * 0.65),
+        )
+
+    def _build_image(self):
+        surf = pygame.Surface((self.width, self.height), pygame.SRCALPHA)
+        c = self.color
+        bright = tuple(min(255, v + 80) for v in c)
+        w, h = self.width, self.height
+        body = [(0, h // 2), (w // 2, 0), (w, h // 4),
+                (w, h * 3 // 4), (w // 2, h)]
+        pygame.draw.polygon(surf, c, body)
+        pygame.draw.polygon(surf, bright, body, 2)
+        pygame.draw.circle(surf, bright, (w // 3, h // 2), max(2, h // 5))
+        pygame.draw.circle(surf, (255, 255, 255), (w // 3, h // 2), max(1, h // 7))
+        return surf
+
+    def _move(self, dt):
+        self.bob_timer += dt * 3.0
+        self.rect.centery = int(self.base_y + 45 * math.sin(self.bob_timer))
+        self.rect.clamp_ip(pygame.Rect(0, 0, self.game.GAME_WIDTH, self.game.GAME_HEIGHT))
+
+    def update(self, dt):
+        if self.game.paused:
+            return
+        if self._burst_left > 0:
+            self._burst_timer -= dt
+            if self._burst_timer <= 0:
+                self._fire_one()
+                self._burst_left -= 1
+                self._burst_timer = self._BURST_GAP
+        super().update(dt)
+
+    def _shoot(self):
+        self._burst_left = self._BURST_COUNT
+        self._burst_timer = 0.0
+        self._fire_one()
+
+    def _fire_one(self):
+        cx, cy = self.rect.left, self.rect.centery
+        px, py = self._player_center()
+        angle = math.atan2(py - cy, px - cx)
+        spread = random.uniform(-0.12, 0.12)
+        dx = self.projectile_speed * math.cos(angle + spread)
+        dy = self.projectile_speed * math.sin(angle + spread)
         self.game.enemy_projectiles.add(
             EnemyProjectile(cx, cy, dx, dy, self.game,
                             size=self.projectile_size,
@@ -266,4 +352,4 @@ class Drone(Enemy):
         )
 
 
-ENEMY_TYPES = [Drone, Fighter]
+ENEMY_TYPES = [Drone, Fighter, Striker]

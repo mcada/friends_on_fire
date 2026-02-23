@@ -99,6 +99,7 @@ The boss appears after surviving 120 seconds (or immediately in Boss Challenge m
 | **Basic** | 1 | Standard asteroid |
 | **Cluster** | 1 | Splits into 2-3 smaller fragments on destruction |
 | **Iron** | 3 | Metallic look, shows damage cracks as HP drops |
+| **Black Hole** | ∞ | Indestructible. Gravitational pull warps space and draws in projectiles, pickups, and other rocks. Grows stronger as it consumes objects. Instant kill on contact. Rare spawn, appears later in runs. |
 
 ## Pickups
 
@@ -139,7 +140,7 @@ friends_on_fire/
 │   ├── Player.py            # Player ship, movement, weapons, rendering
 │   ├── Weapon.py            # Weapon base + StraightCannon, SpreadShot, LaserCannon, HomingMissile
 │   ├── Projectile.py        # All projectile types (straight, pulse, beam, missile, homing)
-│   ├── Rocks.py             # Asteroid types (Basic, Cluster, Iron)
+│   ├── Rocks.py             # Asteroid types (Basic, Cluster, Iron, Black Hole)
 │   ├── Enemy.py             # Drone, Fighter enemy ships
 │   ├── Boss.py              # Boss with multi-phase attacks
 │   ├── Pickup.py            # Weapon upgrade and shield pickups

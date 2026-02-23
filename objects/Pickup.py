@@ -18,8 +18,8 @@ class _BasePickup(pygame.sprite.Sprite):
     def __init__(self, x, y, game, image):
         super().__init__()
         self.game = game
-        self.fx, self.fy = float(x), float(y)
-        self.base_fy = self.fy
+        self._fx, self._fy = float(x), float(y)
+        self._base_fy = self._fy
         self.age = random.uniform(0, math.pi * 2)
         self.magnet_range = 80
         self.image = image
@@ -28,13 +28,13 @@ class _BasePickup(pygame.sprite.Sprite):
 
     def _closest_player_center(self):
         best_dist = float("inf")
-        best_px, best_py = self.fx, self.fy
+        best_px, best_py = self._fx, self._fy
         for p in self.game.players:
             if not p.alive:
                 continue
             px = p.position_x + PLAYER_CENTER_OFFSET_X
             py = p.position_y + PLAYER_CENTER_OFFSET_Y
-            d = (px - self.fx) ** 2 + (py - self.fy) ** 2
+            d = (px - self._fx) ** 2 + (py - self._fy) ** 2
             if d < best_dist:
                 best_dist = d
                 best_px, best_py = px, py
@@ -45,21 +45,21 @@ class _BasePickup(pygame.sprite.Sprite):
             return
         dt = self.game.delta_time
         self.age += dt * BOB_SPEED
-        self.fx -= DRIFT_SPEED
+        self._fx -= DRIFT_SPEED
 
         px, py = self._closest_player_center()
-        dx = px - self.fx
-        dy = py - self.fy
+        dx = px - self._fx
+        dy = py - self._fy
         dist = max(1, (dx ** 2 + dy ** 2) ** 0.5)
 
         if dist < self.magnet_range:
             pull = 5 * (1 - dist / self.magnet_range) + 1
-            self.fx += pull * dx / dist
-            self.base_fy += pull * dy / dist
+            self._fx += pull * dx / dist
+            self._base_fy += pull * dy / dist
 
         bob = math.sin(self.age) * BOB_AMPLITUDE
-        self.fy = self.base_fy + bob
-        self.rect.center = (int(self.fx), int(self.fy))
+        self._fy = self._base_fy + bob
+        self.rect.center = (int(self._fx), int(self._fy))
 
         if self.rect.right < -30:
             self.kill()

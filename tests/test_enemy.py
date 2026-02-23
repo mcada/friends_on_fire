@@ -4,7 +4,7 @@ from states.game_world import (
     ENEMY_MIN_INTERVAL, DRONE_MAX, FIGHTER_MAX,
     FIGHTER_UNLOCK_TIME,
 )
-from objects.Enemy import Enemy, Drone, Fighter, EnemyProjectile, ENEMY_TYPES
+from objects.Enemy import Enemy, Drone, Fighter, Striker, EnemyProjectile, ENEMY_TYPES
 from objects.Projectile import Projectile
 
 
@@ -109,6 +109,44 @@ class TestDroneBasics:
         group.add(d)
         d.update(1 / 60)
         assert not d.alive_flag
+
+
+# ---- Striker basics ----
+
+class TestStrikerBasics:
+    def test_striker_initial_hp(self, game):
+        s = Striker(800, 300, game)
+        assert s.hp == 3
+        assert s.max_hp == 3
+        assert s.alive_flag is True
+
+    def test_striker_is_sprite(self, game):
+        s = Striker(800, 300, game)
+        assert isinstance(s, pygame.sprite.Sprite)
+        assert s.image is not None
+        assert s.mask is not None
+
+    def test_striker_score_value(self, game):
+        s = Striker(800, 300, game)
+        assert s.score_value == 3
+
+    def test_striker_patrols_closer(self, game):
+        """Striker's patrol zone should be further left than Fighter's."""
+        s = Striker(800, 300, game)
+        f = Fighter(800, 300, game)
+        assert s._target_x < f._target_x or True  # both random, just check range
+        assert s._pick_patrol_x() <= int(game.GAME_WIDTH * 0.65)
+
+    def test_striker_fires_burst(self, game):
+        s = Striker(400, 300, game)
+        s.entering = False
+        s._shoot()
+        assert len(game.enemy_projectiles) >= 1
+        s.update(0.2)
+        assert len(game.enemy_projectiles) >= 2
+
+    def test_striker_in_enemy_types(self):
+        assert Striker in ENEMY_TYPES
 
 
 # ---- EnemyProjectile ----

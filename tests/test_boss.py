@@ -254,7 +254,7 @@ def test_boss_invuln_uses_shield_not_flicker(game):
     boss.take_damage(1)
     assert boss.invuln_timer > 0
     boss.update(0.1)
-    assert boss.image == boss._base_image.copy() or True
+    assert boss.image is not None
     assert not hasattr(boss, 'invuln_flash')
 
 

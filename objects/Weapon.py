@@ -70,7 +70,7 @@ class SpreadShot(Weapon):
     fire_rate = 1.8
     sound_name = "spread"
     _SPEED = 8
-    _MAX_AIM_ANGLE = math.pi / 3
+    _MAX_AIM_ANGLE = math.pi / 4.5
     _FAN = [0, -0.28, 0.28, -0.68, 0.68]
 
     def _proj_count(self):
