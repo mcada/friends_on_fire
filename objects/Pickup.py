@@ -1,9 +1,13 @@
-import pygame, math
+import pygame, math, random
 
 from objects.Player import PLAYER_CENTER_OFFSET_X, PLAYER_CENTER_OFFSET_Y
 
 PRIMARY_UPGRADE_COLOR = (255, 210, 60)
 SHIELD_COLOR = (80, 180, 255)
+
+BOB_AMPLITUDE = 18
+BOB_SPEED = 2.5
+DRIFT_SPEED = 1.5
 
 
 class _BasePickup(pygame.sprite.Sprite):
@@ -15,20 +19,35 @@ class _BasePickup(pygame.sprite.Sprite):
         super().__init__()
         self.game = game
         self.fx, self.fy = float(x), float(y)
-        self.age = 0
+        self.base_fy = self.fy
+        self.age = random.uniform(0, math.pi * 2)
         self.magnet_range = 80
         self.image = image
         self.mask = pygame.mask.from_surface(self.image)
         self.rect = self.image.get_rect(center=(x, y))
 
+    def _closest_player_center(self):
+        best_dist = float("inf")
+        best_px, best_py = self.fx, self.fy
+        for p in self.game.players:
+            if not p.alive:
+                continue
+            px = p.position_x + PLAYER_CENTER_OFFSET_X
+            py = p.position_y + PLAYER_CENTER_OFFSET_Y
+            d = (px - self.fx) ** 2 + (py - self.fy) ** 2
+            if d < best_dist:
+                best_dist = d
+                best_px, best_py = px, py
+        return best_px, best_py
+
     def update(self):
         if self.game.paused:
             return
-        self.age += 1
-        self.fx -= 1.5
+        dt = self.game.delta_time
+        self.age += dt * BOB_SPEED
+        self.fx -= DRIFT_SPEED
 
-        px = self.game.player.position_x + PLAYER_CENTER_OFFSET_X
-        py = self.game.player.position_y + PLAYER_CENTER_OFFSET_Y
+        px, py = self._closest_player_center()
         dx = px - self.fx
         dy = py - self.fy
         dist = max(1, (dx ** 2 + dy ** 2) ** 0.5)
@@ -36,25 +55,66 @@ class _BasePickup(pygame.sprite.Sprite):
         if dist < self.magnet_range:
             pull = 5 * (1 - dist / self.magnet_range) + 1
             self.fx += pull * dx / dist
-            self.fy += pull * dy / dist
+            self.base_fy += pull * dy / dist
 
-        bob = math.sin(self.age * 0.08) * 4
-        self.rect.center = (int(self.fx), int(self.fy + bob))
+        bob = math.sin(self.age) * BOB_AMPLITUDE
+        self.fy = self.base_fy + bob
+        self.rect.center = (int(self.fx), int(self.fy))
 
         if self.rect.right < -30:
             self.kill()
 
 
-def _make_diamond(color, size=22):
+def _make_bubble_with_wings(color, size=26):
+    """Draw a translucent bubble with small wings -- clearly not an enemy."""
     surf = pygame.Surface((size, size), pygame.SRCALPHA)
-    c = size // 2
-    diamond = [(c, 1), (size - 2, c), (c, size - 2), (1, c)]
-    parsed = pygame.Color(color) if isinstance(color, str) else color
-    pygame.draw.polygon(surf, parsed, diamond)
-    bright = tuple(min(255, v + 80) for v in parsed[:3])
-    inner = [(c, 5), (size - 6, c), (c, size - 6), (5, c)]
-    pygame.draw.polygon(surf, bright, inner)
-    pygame.draw.polygon(surf, (255, 255, 255), diamond, 2)
+    parsed = pygame.Color(color) if isinstance(color, str) else pygame.Color(*color[:3])
+    r, g, b = parsed.r, parsed.g, parsed.b
+    cx, cy = size // 2, size // 2
+    radius = size // 2 - 2
+
+    # Wings (drawn behind the bubble)
+    wing_color = (min(255, r + 40), min(255, g + 40), min(255, b + 40), 160)
+    wing_w = max(3, size // 5)
+    wing_h = max(5, size // 3)
+    # Left wing
+    pygame.draw.polygon(surf, wing_color, [
+        (cx - radius + 2, cy - 1),
+        (cx - radius - wing_w, cy - wing_h),
+        (cx - radius - wing_w + 2, cy),
+        (cx - radius - wing_w, cy + wing_h),
+        (cx - radius + 2, cy + 1),
+    ])
+    # Right wing
+    pygame.draw.polygon(surf, wing_color, [
+        (cx + radius - 2, cy - 1),
+        (cx + radius + wing_w, cy - wing_h),
+        (cx + radius + wing_w - 2, cy),
+        (cx + radius + wing_w, cy + wing_h),
+        (cx + radius - 2, cy + 1),
+    ])
+
+    # Outer glow
+    glow_surf = pygame.Surface((size, size), pygame.SRCALPHA)
+    pygame.draw.circle(glow_surf, (r, g, b, 50), (cx, cy), radius + 1)
+    surf.blit(glow_surf, (0, 0))
+
+    # Main bubble
+    pygame.draw.circle(surf, (r, g, b, 140), (cx, cy), radius)
+
+    # Inner bright ring
+    bright = (min(255, r + 80), min(255, g + 80), min(255, b + 80))
+    pygame.draw.circle(surf, (*bright, 120), (cx, cy), radius - 2, 2)
+
+    # Highlight / shine
+    shine_cx = cx - radius // 3
+    shine_cy = cy - radius // 3
+    shine_r = max(2, radius // 3)
+    pygame.draw.circle(surf, (255, 255, 255, 180), (shine_cx, shine_cy), shine_r)
+
+    # Outer border
+    pygame.draw.circle(surf, (255, 255, 255, 200), (cx, cy), radius, 1)
+
     return surf
 
 
@@ -70,7 +130,7 @@ class UpgradePickup(_BasePickup):
     def __init__(self, x, y, weapon_cls, game):
         self.weapon_cls = weapon_cls
         color = PRIMARY_UPGRADE_COLOR if weapon_cls is None else pygame.Color(weapon_cls.color)
-        super().__init__(x, y, game, _make_diamond(color))
+        super().__init__(x, y, game, _make_bubble_with_wings(color))
 
 
 class ShieldPickup(_BasePickup):
@@ -79,11 +139,4 @@ class ShieldPickup(_BasePickup):
     pickup_type = "shield"
 
     def __init__(self, x, y, game):
-        size = 24
-        surf = pygame.Surface((size, size), pygame.SRCALPHA)
-        c = size // 2
-        pygame.draw.circle(surf, SHIELD_COLOR, (c, c), c - 1)
-        pygame.draw.circle(surf, (200, 230, 255), (c, c), c - 4)
-        pygame.draw.circle(surf, SHIELD_COLOR, (c, c), c - 1, 2)
-        pygame.draw.circle(surf, (255, 255, 255), (c, c), c - 1, 1)
-        super().__init__(x, y, game, surf)
+        super().__init__(x, y, game, _make_bubble_with_wings(SHIELD_COLOR, size=28))

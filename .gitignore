@@ -1,6 +1,7 @@
 .vscode/
 scores.json
 *.spec
+TEST_ANALYSIS_REPORT.md
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

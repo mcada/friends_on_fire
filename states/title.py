@@ -30,8 +30,8 @@ class Title(State):
     def _activate(self):
         label = MENU_ITEMS[self.selected]
         if label == "New Game":
-            from states.level_select import LevelSelect
-            new_state = LevelSelect(self.game)
+            from states.player_select import PlayerSelect
+            new_state = PlayerSelect(self.game)
             new_state.enter_state()
         elif label == "Controls":
             from states.controls import Controls

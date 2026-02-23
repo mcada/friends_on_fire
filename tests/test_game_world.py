@@ -22,7 +22,7 @@ def _no_actions():
 def test_rocks_spawn_after_interval(game):
     gw = _enter_game_world(game)
     actions = _no_actions()
-    for _ in range(65):
+    for _ in range(120):
         gw.update(1 / 60, actions)
     assert len(game.rocks) > 0
 
@@ -38,16 +38,17 @@ def test_spawn_interval_decreases(game):
 
 def test_spawn_interval_has_minimum(game):
     gw = _enter_game_world(game)
-    gw.rock_spawn_interval = 0.45
-    gw.rock_spawn_timer = 0.45
+    gw.rock_spawn_interval = 0.70
+    gw.rock_spawn_timer = 0.70
     actions = _no_actions()
     gw.update(1 / 60, actions)
-    assert gw.rock_spawn_interval >= 0.45
+    assert gw.rock_spawn_interval >= 0.70
 
 
 def test_game_over_on_collision(game):
     gw = _enter_game_world(game)
-    p = game.player
+    p = game.players[0]
+    p.lives = 1
     p.position_x, p.position_y = 200, 200
     center_x = int(p.position_x) + PLAYER_CENTER_OFFSET_X
     center_y = int(p.position_y) + PLAYER_CENTER_OFFSET_Y
@@ -100,7 +101,8 @@ def test_high_score_updates(game):
     gw.asteroids_killed = 5
     gw.game_over = False
 
-    p = game.player
+    p = game.players[0]
+    p.lives = 1
     p.position_x, p.position_y = 200, 200
     center_x = int(p.position_x) + PLAYER_CENTER_OFFSET_X
     center_y = int(p.position_y) + PLAYER_CENTER_OFFSET_Y
@@ -232,7 +234,8 @@ def test_first_kill_drops_shield(game):
 
 def test_shield_absorbs_hit(game):
     gw = _enter_game_world(game)
-    p = game.player
+    p = game.players[0]
+    from objects.Player import MAX_LIVES
     p.has_shield = True
     p.position_x, p.position_y = 200, 200
     center_x = int(p.position_x) + PLAYER_CENTER_OFFSET_X
@@ -245,11 +248,12 @@ def test_shield_absorbs_hit(game):
 
     assert gw.game_over is False
     assert p.has_shield is False
+    assert p.lives == MAX_LIVES
 
 
 def test_shield_destroys_rock_on_hit(game):
     gw = _enter_game_world(game)
-    p = game.player
+    p = game.players[0]
     p.has_shield = True
     p.position_x, p.position_y = 200, 200
     center_x = int(p.position_x) + PLAYER_CENTER_OFFSET_X
@@ -264,8 +268,9 @@ def test_shield_destroys_rock_on_hit(game):
 
 def test_no_shield_means_death(game):
     gw = _enter_game_world(game)
-    p = game.player
+    p = game.players[0]
     p.has_shield = False
+    p.lives = 1
     p.position_x, p.position_y = 200, 200
     center_x = int(p.position_x) + PLAYER_CENTER_OFFSET_X
     center_y = int(p.position_y) + PLAYER_CENTER_OFFSET_Y
@@ -274,6 +279,56 @@ def test_no_shield_means_death(game):
 
     actions = _no_actions()
     gw.update(1 / 60, actions)
+    assert gw.game_over is True
+
+
+def test_collision_removes_one_life(game):
+    gw = _enter_game_world(game)
+    p = game.players[0]
+    from objects.Player import MAX_LIVES
+    assert p.lives == MAX_LIVES
+    p.position_x, p.position_y = 200, 200
+    center_x = int(p.position_x) + PLAYER_CENTER_OFFSET_X
+    center_y = int(p.position_y) + PLAYER_CENTER_OFFSET_Y
+    rock = Rock(center_x, center_y, 45, 35, game)
+    game.rocks.add(rock)
+    actions = _no_actions()
+    gw.update(1 / 60, actions)
+    assert p.lives == MAX_LIVES - 1
+    assert gw.game_over is False
+    assert p.alive is True
+    assert p.hit_invuln > 0
+
+
+def test_invuln_prevents_double_hit(game):
+    gw = _enter_game_world(game)
+    p = game.players[0]
+    from objects.Player import MAX_LIVES
+    p.position_x, p.position_y = 200, 200
+    center_x = int(p.position_x) + PLAYER_CENTER_OFFSET_X
+    center_y = int(p.position_y) + PLAYER_CENTER_OFFSET_Y
+    rock1 = Rock(center_x, center_y, 45, 35, game, dx=0)
+    rock2 = Rock(center_x + 5, center_y, 45, 35, game, dx=0)
+    game.rocks.add(rock1, rock2)
+    actions = _no_actions()
+    gw.update(1 / 60, actions)
+    assert p.lives == MAX_LIVES - 1, "Should only lose 1 life due to invulnerability"
+
+
+def test_three_hits_kills(game):
+    gw = _enter_game_world(game)
+    p = game.players[0]
+    p.position_x, p.position_y = 200, 200
+    actions = _no_actions()
+    for i in range(3):
+        p.hit_invuln = 0
+        center_x = int(p.position_x) + PLAYER_CENTER_OFFSET_X
+        center_y = int(p.position_y) + PLAYER_CENTER_OFFSET_Y
+        rock = Rock(center_x, center_y, 45, 35, game)
+        game.rocks.add(rock)
+        gw.update(1 / 60, actions)
+    assert p.lives == 0
+    assert p.alive is False
     assert gw.game_over is True
 
 
@@ -286,6 +341,6 @@ def test_shield_pity_chance_grows(game):
 
 def test_shield_no_drop_when_already_shielded(game):
     gw = _enter_game_world(game)
-    game.player.has_shield = True
+    game.players[0].has_shield = True
     gw.total_kills_ever = 1
     assert gw._should_spawn_shield() is False

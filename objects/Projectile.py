@@ -5,6 +5,7 @@ GLOW_PAD = 6
 
 HOMING_TURN_RATE = 0.12
 HOMING_SPEED = 5
+HOMING_ACQUIRE_RANGE = 400
 
 
 class Projectile(pygame.sprite.Sprite):
@@ -12,9 +13,11 @@ class Projectile(pygame.sprite.Sprite):
 
     def __init__(self, color, x, y, game, dx=8, dy=0, wave=None,
                  width=15, height=15, piercing=False, shiny=False,
-                 pulse=False, homing=False):
+                 pulse=False, homing=False, fullbeam=False,
+                 lifetime=0, damage=1, owner=None):
         super().__init__()
         self.game = game
+        self.owner = owner
         self.dx = dx
         self.dy = dy
         self.wave = wave
@@ -23,9 +26,14 @@ class Projectile(pygame.sprite.Sprite):
         self.piercing = piercing
         self.pulse = pulse
         self.homing = homing
+        self.fullbeam = fullbeam
+        self.lifetime = lifetime
+        self.damage = damage
 
         if homing:
             self.image = self._make_missile(color, width, height, shiny)
+        elif fullbeam:
+            self.image = self._make_fullbeam(color, width, height, shiny)
         elif pulse:
             self.image = self._make_pulse(color, width, height, shiny)
         elif piercing:
@@ -63,8 +71,13 @@ class Projectile(pygame.sprite.Sprite):
         r = max(width, height) // 2
         pad = 8 if shiny else 4
         size = (r + pad) * 2
+        if shiny:
+            size += 8
         surf = pygame.Surface((size, size), pygame.SRCALPHA)
         cx, cy = size // 2, size // 2
+
+        if shiny:
+            pygame.draw.circle(surf, (*c[:3], 50), (cx, cy), size // 2)
 
         outer_alpha = 120 if shiny else 90
         pygame.draw.circle(surf, (*c[:3], outer_alpha), (cx, cy), r + pad)
@@ -79,8 +92,44 @@ class Projectile(pygame.sprite.Sprite):
         pygame.draw.circle(surf, (255, 255, 255, 240), (cx, cy), max(1, core_r // 2))
 
         if shiny:
-            pygame.draw.circle(surf, (*c[:3], 50), (cx, cy), r + pad + 4)
-            pygame.draw.circle(surf, (255, 255, 255, 80), (cx, cy), core_r + 2)
+            pygame.draw.circle(surf, (255, 255, 255, 80), (cx, cy), core_r + 2, 2)
+        return surf
+
+    @staticmethod
+    def _make_fullbeam(color, width, height, shiny=False):
+        c = pygame.Color(color)
+        pad = 10 if shiny else 6
+        total_h = height + pad * 2
+        surf = pygame.Surface((width, total_h), pygame.SRCALPHA)
+
+        pygame.draw.rect(surf, (*c[:3], 30), (0, 0, width, total_h),
+                         border_radius=total_h // 2)
+
+        mid = tuple(min(255, v + 60) for v in c[:3])
+        inner_h = height
+        inner_y = pad
+        pygame.draw.rect(surf, (*mid, 140), (0, inner_y, width, inner_h),
+                         border_radius=inner_h // 2)
+
+        bright = tuple(min(255, v + 140) for v in c[:3])
+        core_h = max(4, height // 2)
+        core_y = (total_h - core_h) // 2
+        pygame.draw.rect(surf, (*bright, 230), (0, core_y, width, core_h),
+                         border_radius=core_h // 2)
+
+        center_y = total_h // 2
+        pygame.draw.line(surf, (255, 255, 255, 240),
+                         (0, center_y), (width - 1, center_y), 2)
+
+        if shiny:
+            glow_h = total_h + 8
+            glow_y = (total_h - glow_h) // 2
+            pygame.draw.rect(surf, (*c[:3], 40), (0, glow_y, width, glow_h),
+                             border_radius=glow_h // 2)
+            pygame.draw.line(surf, (255, 255, 255, 180),
+                             (0, center_y - 1), (width - 1, center_y - 1), 1)
+            pygame.draw.line(surf, (255, 255, 255, 180),
+                             (0, center_y + 1), (width - 1, center_y + 1), 1)
         return surf
 
     @staticmethod
@@ -132,25 +181,35 @@ class Projectile(pygame.sprite.Sprite):
             return glow
         return surf
 
-    def _steer_homing(self):
+    def _find_homing_target(self, cx, cy):
+        """Only lock onto enemy ships or boss within HOMING_ACQUIRE_RANGE."""
+        range_sq = HOMING_ACQUIRE_RANGE ** 2
         best_dist = float("inf")
         target = None
-        cx, cy = self.rect.centerx, self.rect.centery
-        for rock in self.game.rocks:
-            dx = rock.rect.centerx - cx
-            dy = rock.rect.centery - cy
+
+        for e in self.game.enemies:
+            if not e.alive_flag:
+                continue
+            dx = e.rect.centerx - cx
+            dy = e.rect.centery - cy
             d = dx * dx + dy * dy
-            if d < best_dist:
+            if d < best_dist and d <= range_sq:
                 best_dist = d
-                target = rock
+                target = e
+
         gw = self.game.active_game_world
         if gw and gw.boss and gw.boss.alive_flag:
             dx = gw.boss.rect.centerx - cx
             dy = gw.boss.rect.centery - cy
             d = dx * dx + dy * dy
-            if d < best_dist:
+            if d < best_dist and d <= range_sq:
                 target = gw.boss
 
+        return target
+
+    def _steer_homing(self):
+        cx, cy = self.rect.centerx, self.rect.centery
+        target = self._find_homing_target(cx, cy)
         if target is None:
             return
         tx, ty = target.rect.centerx, target.rect.centery
@@ -171,6 +230,10 @@ class Projectile(pygame.sprite.Sprite):
         if self.game.paused:
             return
         self.age += 1
+
+        if self.lifetime and self.age >= self.lifetime:
+            self.kill()
+            return
 
         if self.homing:
             self._steer_homing()

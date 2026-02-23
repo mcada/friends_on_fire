@@ -137,28 +137,32 @@ class SpreadShot(Weapon):
 
 
 class LaserCannon(Weapon):
-    """Secondary: piercing laser beams. Each level adds more beams."""
+    """Secondary: a single screen-spanning beam. Each level makes it beefier."""
 
     name = "Laser Cannon"
     color = "lime"
     fire_rate = 2.5
     sound_name = "laser"
 
+    _BEAM_SPECS = {
+        1: {"height": 16, "lifetime": 10},
+        2: {"height": 28, "lifetime": 15},
+        3: {"height": 40, "lifetime": 20},
+    }
+
     def get_projectiles(self, x, y, game=None):
         shiny = self.level >= self.max_level
-        projs = [{"x": x, "y": y, "dx": 10, "width": 60, "height": 6, "piercing": True}]
-        if self.level >= 2:
-            projs.append({"x": x, "y": y - 16, "dx": 10, "width": 60, "height": 6, "piercing": True})
-            projs.append({"x": x, "y": y + 16, "dx": 10, "width": 60, "height": 6, "piercing": True})
-        if self.level >= 3:
-            projs[0]["width"] = 80
-            projs[0]["height"] = 10
-            projs.append({"x": x, "y": y - 32, "dx": 9, "dy": 1, "width": 50, "height": 5, "piercing": True})
-            projs.append({"x": x, "y": y + 32, "dx": 9, "dy": -1, "width": 50, "height": 5, "piercing": True})
+        spec = self._BEAM_SPECS.get(self.level, self._BEAM_SPECS[1])
+        screen_w = game.GAME_WIDTH if game else 1280
+        beam_w = screen_w - int(x) + 40
+        p = {
+            "x": x + beam_w // 2, "y": y,
+            "dx": 0, "width": beam_w, "height": spec["height"],
+            "piercing": True, "fullbeam": True, "lifetime": spec["lifetime"],
+        }
         if shiny:
-            for p in projs:
-                p["shiny"] = True
-        return projs
+            p["shiny"] = True
+        return [p]
 
 
 class HomingMissile(Weapon):
@@ -172,17 +176,17 @@ class HomingMissile(Weapon):
     def get_projectiles(self, x, y, game=None):
         shiny = self.level >= self.max_level
         projs = [{"x": x, "y": y, "dx": 5, "dy": -1, "homing": True,
-                  "width": 14, "height": 8}]
+                  "width": 14, "height": 8, "damage": 2}]
         if self.level >= 2:
             projs.append({"x": x, "y": y - 12, "dx": 5, "dy": -2, "homing": True,
-                          "width": 14, "height": 8})
+                          "width": 14, "height": 8, "damage": 2})
             projs.append({"x": x, "y": y + 12, "dx": 5, "dy": 2, "homing": True,
-                          "width": 14, "height": 8})
+                          "width": 14, "height": 8, "damage": 2})
         if self.level >= 3:
             projs.append({"x": x, "y": y - 24, "dx": 4, "dy": -3, "homing": True,
-                          "width": 14, "height": 8})
+                          "width": 14, "height": 8, "damage": 2})
             projs.append({"x": x, "y": y + 24, "dx": 4, "dy": 3, "homing": True,
-                          "width": 14, "height": 8})
+                          "width": 14, "height": 8, "damage": 2})
         if shiny:
             for p in projs:
                 p["shiny"] = True

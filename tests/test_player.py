@@ -7,7 +7,7 @@ from objects.Weapon import SpreadShot, LaserCannon
 
 
 def test_moves_right(game, actions):
-    p = game.player
+    p = game.players[0]
     start_x = p.position_x
     actions["right"] = True
     p.update(1 / 60, actions)
@@ -15,7 +15,7 @@ def test_moves_right(game, actions):
 
 
 def test_moves_left(game, actions):
-    p = game.player
+    p = game.players[0]
     p.position_x = 200
     start_x = p.position_x
     actions["left"] = True
@@ -24,7 +24,7 @@ def test_moves_left(game, actions):
 
 
 def test_moves_up(game, actions):
-    p = game.player
+    p = game.players[0]
     p.position_y = 200
     start_y = p.position_y
     actions["up"] = True
@@ -33,7 +33,7 @@ def test_moves_up(game, actions):
 
 
 def test_moves_down(game, actions):
-    p = game.player
+    p = game.players[0]
     p.position_y = 200
     start_y = p.position_y
     actions["down"] = True
@@ -42,7 +42,7 @@ def test_moves_down(game, actions):
 
 
 def test_bounded_left(game, actions):
-    p = game.player
+    p = game.players[0]
     p.position_x = 0
     actions["left"] = True
     p.update(1 / 60, actions)
@@ -50,7 +50,7 @@ def test_bounded_left(game, actions):
 
 
 def test_bounded_right(game, actions):
-    p = game.player
+    p = game.players[0]
     max_x = game.GAME_WIDTH * 4 / 5
     p.position_x = max_x
     actions["right"] = True
@@ -59,7 +59,7 @@ def test_bounded_right(game, actions):
 
 
 def test_bounded_top(game, actions):
-    p = game.player
+    p = game.players[0]
     p.position_y = 0
     actions["up"] = True
     p.update(1 / 60, actions)
@@ -67,7 +67,7 @@ def test_bounded_top(game, actions):
 
 
 def test_bounded_bottom(game, actions):
-    p = game.player
+    p = game.players[0]
     max_y = game.GAME_HEIGHT - p.curr_image.get_height()
     p.position_y = max_y
     actions["down"] = True
@@ -77,7 +77,7 @@ def test_bounded_bottom(game, actions):
 
 def test_shoot_creates_projectile(game, actions):
     game.projectiles.empty()
-    p = game.player
+    p = game.players[0]
     p.primary_cooldown = 0
     actions["space"] = True
     p.update(1 / 60, actions)
@@ -86,7 +86,7 @@ def test_shoot_creates_projectile(game, actions):
 
 def test_primary_cooldown_prevents_rapid_fire(game, actions):
     game.projectiles.empty()
-    p = game.player
+    p = game.players[0]
     p.primary_cooldown = 0
     actions["space"] = True
     p.update(1 / 60, actions)
@@ -96,7 +96,7 @@ def test_primary_cooldown_prevents_rapid_fire(game, actions):
 
 def test_primary_cooldown_expires(game, actions):
     game.projectiles.empty()
-    p = game.player
+    p = game.players[0]
     p.primary_cooldown = 0
     actions["space"] = True
     p.update(1 / 60, actions)
@@ -109,23 +109,23 @@ def test_primary_cooldown_expires(game, actions):
 
 
 def test_has_mask(game):
-    assert game.player.mask is not None
-    assert game.player.mask.count() > 0
+    assert game.players[0].mask is not None
+    assert game.players[0].mask.count() > 0
 
 
 # ---- secondary weapon tests ----
 
 def test_no_secondary_by_default(game):
-    assert game.player.secondary is None
+    assert game.players[0].secondary is None
 
 
 def test_set_secondary_equips_weapon(game):
-    game.player.set_secondary(SpreadShot)
-    assert isinstance(game.player.secondary, SpreadShot)
+    game.players[0].set_secondary(SpreadShot)
+    assert isinstance(game.players[0].secondary, SpreadShot)
 
 
 def test_secondary_makes_sprite_taller(game):
-    p = game.player
+    p = game.players[0]
     base_h = p.curr_image.get_height()
     p.set_secondary(SpreadShot)
     assert p.curr_image.get_height() == base_h + CANNON_PAD
@@ -133,7 +133,7 @@ def test_secondary_makes_sprite_taller(game):
 
 def test_secondary_activates_on_key(game, actions):
     """Pressing secondary key transitions from READY to ACTIVE."""
-    p = game.player
+    p = game.players[0]
     p.set_secondary(SpreadShot)
     assert p.sec_state == SEC_READY
     actions["secondary"] = True
@@ -144,7 +144,7 @@ def test_secondary_activates_on_key(game, actions):
 def test_secondary_fires_during_active(game, actions):
     """Secondary auto-fires during ACTIVE state."""
     game.projectiles.empty()
-    p = game.player
+    p = game.players[0]
     p.set_secondary(SpreadShot)
     actions["secondary"] = True
     p.update(1 / 60, actions)
@@ -153,7 +153,7 @@ def test_secondary_fires_during_active(game, actions):
 
 
 def test_secondary_active_duration_scales_with_level(game):
-    p = game.player
+    p = game.players[0]
     p.set_secondary(SpreadShot)
     assert p._sec_active_duration() == 1 * SECONDARY_ACTIVE_PER_LEVEL
     p.upgrade_secondary()
@@ -162,7 +162,7 @@ def test_secondary_active_duration_scales_with_level(game):
 
 def test_secondary_enters_cooldown_after_active(game, actions):
     """After active time expires, enters COOLDOWN."""
-    p = game.player
+    p = game.players[0]
     p.set_secondary(SpreadShot)
     actions["secondary"] = True
     p.update(0.01, actions)
@@ -175,7 +175,7 @@ def test_secondary_enters_cooldown_after_active(game, actions):
 
 def test_secondary_returns_to_ready_after_cooldown(game, actions):
     """After cooldown expires, returns to READY."""
-    p = game.player
+    p = game.players[0]
     p.set_secondary(SpreadShot)
     actions["secondary"] = True
     p.update(0.01, actions)
@@ -190,7 +190,7 @@ def test_secondary_returns_to_ready_after_cooldown(game, actions):
 
 def test_secondary_cooldown_min_1s(game):
     """At max level, cooldown should be at least 1 second."""
-    p = game.player
+    p = game.players[0]
     p.set_secondary(SpreadShot)
     while p.upgrade_secondary():
         pass
@@ -200,7 +200,7 @@ def test_secondary_cooldown_min_1s(game):
 def test_primary_fires_independently_of_secondary(game, actions):
     """Primary fires on space even when secondary is on cooldown."""
     game.projectiles.empty()
-    p = game.player
+    p = game.players[0]
     p.set_secondary(SpreadShot)
     p.sec_state = SEC_COOLDOWN
     p.sec_state_timer = 5.0
@@ -213,7 +213,7 @@ def test_primary_fires_independently_of_secondary(game, actions):
 def test_secondary_does_not_fire_on_space(game, actions):
     """Space alone does not activate secondary."""
     game.projectiles.empty()
-    p = game.player
+    p = game.players[0]
     p.set_secondary(SpreadShot)
     p.primary_cooldown = 0
     actions["space"] = True
@@ -226,7 +226,7 @@ def test_laser_fires_slower_than_spread(game):
 
 
 def test_upgrade_secondary(game):
-    p = game.player
+    p = game.players[0]
     p.set_secondary(SpreadShot)
     assert p.secondary.level == 1
     assert p.upgrade_secondary() is True
@@ -234,7 +234,7 @@ def test_upgrade_secondary(game):
 
 
 def test_secondary_level_remembered_on_switch(game):
-    p = game.player
+    p = game.players[0]
     p.set_secondary(SpreadShot)
     p.upgrade_secondary()
     assert p.secondary.level == 2
@@ -246,7 +246,7 @@ def test_secondary_level_remembered_on_switch(game):
 
 
 def test_secondary_mask_updates(game):
-    p = game.player
+    p = game.players[0]
     base_count = p.mask.count()
     p.set_secondary(SpreadShot)
     assert p.mask.count() > base_count
@@ -256,7 +256,7 @@ def test_secondary_mask_updates(game):
 
 def _equip_two_weapons(game):
     """Helper: equip SpreadShot then LaserCannon, ending with Laser selected."""
-    p = game.player
+    p = game.players[0]
     p.set_secondary(SpreadShot)
     p.set_secondary(LaserCannon)
     return p
@@ -264,7 +264,7 @@ def _equip_two_weapons(game):
 
 def test_cycle_saves_active_state(game, actions):
     """Cycling away from a firing weapon saves SEC_ACTIVE in sec_weapon_states."""
-    p = game.player
+    p = game.players[0]
     p.set_secondary(SpreadShot)
     p.set_secondary(LaserCannon)
 

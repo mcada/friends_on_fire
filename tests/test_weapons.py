@@ -81,36 +81,61 @@ class TestSpreadShot:
             prev = count
 
 
+class _FakeGame:
+    GAME_WIDTH = 1280
+
 class TestLaserCannon:
-    def test_level1_single_beam(self):
+    def test_always_one_beam(self):
         w = LaserCannon()
-        projs = w.get_projectiles(100, 200)
-        assert len(projs) == 1
-        assert projs[0]["piercing"] is True
+        for lv in range(1, w.max_level + 1):
+            w.level = lv
+            assert len(w.get_projectiles(100, 200, game=_FakeGame())) == 1
 
-    def test_level2_adds_beams(self):
+    def test_beam_is_piercing_and_fullbeam(self):
         w = LaserCannon()
-        w.level = 2
-        projs = w.get_projectiles(100, 200)
-        assert len(projs) == 3
-        assert all(p["piercing"] for p in projs)
+        p = w.get_projectiles(100, 200, game=_FakeGame())[0]
+        assert p["piercing"] is True
+        assert p["fullbeam"] is True
 
-    def test_level3_adds_more_and_shiny(self):
+    def test_beam_spans_screen(self):
+        w = LaserCannon()
+        p = w.get_projectiles(100, 200, game=_FakeGame())[0]
+        assert p["width"] >= _FakeGame.GAME_WIDTH - 100
+
+    def test_beam_stationary(self):
+        w = LaserCannon()
+        p = w.get_projectiles(100, 200, game=_FakeGame())[0]
+        assert p["dx"] == 0
+
+    def test_beam_has_lifetime(self):
+        w = LaserCannon()
+        p = w.get_projectiles(100, 200, game=_FakeGame())[0]
+        assert p["lifetime"] > 0
+
+    def test_higher_level_beefier(self):
+        w = LaserCannon()
+        heights = []
+        lifetimes = []
+        for lv in range(1, w.max_level + 1):
+            w.level = lv
+            p = w.get_projectiles(100, 200, game=_FakeGame())[0]
+            heights.append(p["height"])
+            lifetimes.append(p["lifetime"])
+        assert heights == sorted(heights)
+        assert lifetimes == sorted(lifetimes)
+        assert heights[-1] > heights[0]
+
+    def test_level3_shiny(self):
         w = LaserCannon()
         w.level = 3
-        projs = w.get_projectiles(100, 200)
-        assert len(projs) == 5
-        assert all(p.get("shiny") for p in projs)
-        assert projs[0]["width"] > 60
+        p = w.get_projectiles(100, 200, game=_FakeGame())[0]
+        assert p.get("shiny") is True
 
-    def test_levels_additive(self):
+    def test_not_shiny_before_max(self):
         w = LaserCannon()
-        prev = 0
-        for lv in range(1, 4):
-            w.level = lv
-            count = len(w.get_projectiles(100, 200))
-            assert count >= prev
-            prev = count
+        w.level = 2
+        p = w.get_projectiles(100, 200, game=_FakeGame())[0]
+        assert not p.get("shiny", False)
 
 
 class TestHomingMissile:
@@ -143,6 +168,19 @@ class TestHomingMissile:
             cur = len(w.get_projectiles(100, 200))
             assert cur >= prev
             prev = cur
+
+    def test_damage_is_2(self):
+        w = HomingMissile()
+        for lv in range(1, w.max_level + 1):
+            w.level = lv
+            for p in w.get_projectiles(100, 200):
+                assert p["damage"] == 2
+
+    def test_default_weapon_damage_is_1(self):
+        for cls in [StraightCannon, SpreadShot]:
+            w = cls()
+            for p in w.get_projectiles(100, 200):
+                assert p.get("damage", 1) == 1
 
 
 class TestUpgradeMechanics:

@@ -4,6 +4,7 @@ import pygame, os
 
 from objects.Projectile import Projectile
 from objects.Weapon import StraightCannon
+from objects.ships import SHIP_DESIGNS
 
 PLAYER_WIDTH, PLAYER_HEIGHT = 80, 35
 PLAYER_CENTER_OFFSET_X = PLAYER_WIDTH // 2
@@ -13,16 +14,29 @@ CANNON_PAD = 10
 SECONDARY_CYCLE = 10.0
 SECONDARY_ACTIVE_PER_LEVEL = 3.0
 
+MAX_LIVES = 3
+HIT_INVULN_DURATION = 1.0
+DAMAGE_INDICATOR_DURATION = 2.0
+
 SEC_READY = "ready"
 SEC_ACTIVE = "active"
 SEC_COOLDOWN = "cooldown"
 
 
 class Player:
-    def __init__(self, game):
+    PLAYER_COLORS = [
+        (255, 255, 255),
+        (255, 100, 100),
+        (255, 220, 80),
+    ]
+
+    def __init__(self, game, index=0, ship_id=None):
         self.game = game
+        self.index = index
+        self.ship_id = ship_id if ship_id is not None else index
         self.load_sprites()
-        self.position_x, self.position_y = 100, self.game.GAME_HEIGHT / 2
+        self.position_x = 100
+        self.position_y = self._default_y()
         self.current_frame, self.last_frame_update = 0, 0
         self.player_speed = 300
         self.primary_fire_rate = 0.5
@@ -38,6 +52,39 @@ class Player:
         self.auto_fire = False
         self.has_shield = False
         self.shield_flash = 0
+        self.lives = MAX_LIVES
+        self.hit_invuln = 0
+        self.damage_indicator = 0
+        self.alive = True
+        self.kills = 0
+        self._build_sprites()
+
+    def _default_y(self):
+        n = getattr(self.game, "num_players", 1)
+        if n <= 1:
+            return self.game.GAME_HEIGHT / 2
+        return self.game.GAME_HEIGHT * (self.index + 1) / (n + 1)
+
+    def reset(self):
+        self.position_x = 100
+        self.position_y = self._default_y()
+        self.primary = StraightCannon()
+        self.primary_cooldown = 0
+        self.secondary_shot_cooldown = 0
+        self.secondary = None
+        self.secondary_levels = {}
+        self.secondary_inventory = []
+        self.sec_weapon_states = {}
+        self.sec_state = SEC_READY
+        self.sec_state_timer = 0
+        self.auto_fire = False
+        self.has_shield = False
+        self.shield_flash = 0
+        self.lives = MAX_LIVES
+        self.hit_invuln = 0
+        self.damage_indicator = 0
+        self.alive = True
+        self.kills = 0
         self._build_sprites()
 
     # ---- secondary weapon management ----
@@ -138,6 +185,11 @@ class Player:
     # ---- update / render ----
 
     def update(self, delta_time, actions):
+        if self.hit_invuln > 0:
+            self.hit_invuln = max(0, self.hit_invuln - delta_time)
+        if self.damage_indicator > 0:
+            self.damage_indicator = max(0, self.damage_indicator - delta_time)
+
         direction_x = actions["right"] - actions["left"]
         direction_y = actions["down"] - actions["up"]
         self.position_x += self.player_speed * delta_time * direction_x
@@ -247,11 +299,17 @@ class Player:
         for spec in weapon.get_projectiles(mx, my, game=self.game):
             kwargs = {k: v for k, v in spec.items() if k not in ("x", "y")}
             self.game.projectiles.add(
-                Projectile(weapon.color, spec["x"], spec["y"], self.game, **kwargs)
+                Projectile(weapon.color, spec["x"], spec["y"], self.game,
+                           owner=self, **kwargs)
             )
 
     def render(self, display):
-        display.blit(self.curr_image, (self.position_x, self.position_y))
+        if self.hit_invuln > 0:
+            ghost = self.curr_image.copy()
+            ghost.set_alpha(70)
+            display.blit(ghost, (self.position_x, self.position_y))
+        else:
+            display.blit(self.curr_image, (self.position_x, self.position_y))
         if self.has_shield:
             cx = int(self.position_x) + self.curr_image.get_width() // 2
             cy = int(self.position_y) + self.curr_image.get_height() // 2
@@ -264,6 +322,50 @@ class Player:
             display.blit(shield_surf, (cx - sc, cy - sc))
         if self.shield_flash > 0:
             self.shield_flash -= 1
+        if self.damage_indicator > 0:
+            self._draw_damage_hearts(display)
+
+    def _draw_damage_hearts(self, display):
+        hs = 10
+        gap = 2
+        total_w = MAX_LIVES * (hs + gap) - gap
+        ship_cx = int(self.position_x) + self.curr_image.get_width() // 2
+        start_x = ship_cx - total_w // 2
+        y = int(self.position_y) - hs - 6
+
+        t = pygame.time.get_ticks() / 1000.0
+        blink = 0.45 + 0.55 * math.sin(t * 8)
+        fade = min(1.0, self.damage_indicator / 0.5)
+        alpha = max(0, min(255, int(255 * blink * fade)))
+
+        for i in range(MAX_LIVES):
+            hx = start_x + i * (hs + gap)
+            self._draw_tiny_heart(display, hx, y, hs, filled=(i < self.lives),
+                                  alpha=alpha)
+
+    @staticmethod
+    def _draw_tiny_heart(display, x, y, size, filled=True, alpha=255):
+        s = size
+        r = s // 4
+        heart = pygame.Surface((s, s), pygame.SRCALPHA)
+        hcx = s // 2
+
+        if filled:
+            base_color = (220, 40, 40, alpha)
+            highlight = (255, 130, 130, min(255, alpha))
+        else:
+            base_color = (60, 60, 65, alpha // 2)
+            highlight = None
+
+        pygame.draw.circle(heart, base_color, (hcx - r + 1, r + 2), r)
+        pygame.draw.circle(heart, base_color, (hcx + r - 1, r + 2), r)
+        pygame.draw.polygon(heart, base_color, [
+            (1, r + 2), (s - 1, r + 2), (hcx, s - 2),
+        ])
+        if highlight:
+            pygame.draw.circle(heart, highlight, (hcx - r, r), max(1, r // 2))
+
+        display.blit(heart, (x, y))
 
     def animate(self, delta_time, direction_x, direction_y):
         self.last_frame_update += delta_time
@@ -281,21 +383,29 @@ class Player:
             self.mask = self.curr_masks[self.current_frame]
 
     def load_sprites(self):
-        self.sprite_dir = os.path.join(self.game.sprite_dir, "ship")
-        self._base_stationary, self._base_flames = [], []
-        self._base_stationary.append(
+        design = SHIP_DESIGNS[self.ship_id] if self.ship_id < len(SHIP_DESIGNS) else SHIP_DESIGNS[0]
+        builder = design["builder"]
+        if builder is not None:
+            self._base_stationary, self._base_flames = builder()
+        else:
+            self._load_png_sprites()
+
+    def _load_png_sprites(self):
+        sprite_dir = os.path.join(self.game.sprite_dir, "ship")
+        self._base_stationary = [
             pygame.transform.scale(
                 pygame.image.load(
-                    os.path.join(self.sprite_dir, "ship_0.png")
+                    os.path.join(sprite_dir, "ship_0.png")
                 ).convert_alpha(),
                 (PLAYER_WIDTH, PLAYER_HEIGHT),
             )
-        )
+        ]
+        self._base_flames = []
         for i in range(1, 4):
             self._base_flames.append(
                 pygame.transform.scale(
                     pygame.image.load(
-                        os.path.join(self.sprite_dir, "ship_flames_" + str(i) + ".png")
+                        os.path.join(sprite_dir, "ship_flames_" + str(i) + ".png")
                     ).convert_alpha(),
                     (PLAYER_WIDTH, PLAYER_HEIGHT),
                 )

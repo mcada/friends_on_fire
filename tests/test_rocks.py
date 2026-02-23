@@ -1,26 +1,26 @@
 import pygame
-from objects.Rocks import Rock, BASIC, CLUSTER, IRON
+from objects.Rocks import Rock, BASIC, CLUSTER, IRON, BLACKHOLE
 
 
 # ---- basic asteroid (default) ----
 
 def test_moves_left(game):
     rock = Rock(500, 300, 30, 30, game)
-    start_x = rock.rect.x
+    start_x = rock.rect.centerx
     rock.update()
-    assert rock.rect.x < start_x
+    assert rock.rect.centerx < start_x
 
 
 def test_moves_at_correct_speed(game):
     rock = Rock(500, 300, 30, 30, game)
-    start_x = rock.rect.x
+    start_x = rock.rect.centerx
     rock.update()
-    assert rock.rect.x == start_x - 3
+    assert rock.rect.centerx == start_x - 3
 
 
 def test_killed_when_offscreen(game):
     group = pygame.sprite.Group()
-    rock = Rock(-10, 300, 5, 5, game)
+    rock = Rock(-40, 300, 5, 5, game)
     group.add(rock)
     rock.update()
     assert len(group) == 0
@@ -86,10 +86,10 @@ def test_iron_visual_changes_on_damage(game):
 
 def test_fragment_with_dy_moves_diagonally(game):
     rock = Rock(500, 300, 15, 15, game, dx=-4, dy=3)
-    start_x, start_y = rock.rect.x, rock.rect.y
+    cx, cy = rock.rect.centerx, rock.rect.centery
     rock.update()
-    assert rock.rect.x == start_x - 4
-    assert rock.rect.y == start_y + 3
+    assert rock.rect.centerx == cx - 4
+    assert rock.rect.centery == cy + 3
 
 
 def test_fragment_killed_offscreen_bottom(game):
@@ -98,3 +98,63 @@ def test_fragment_killed_offscreen_bottom(game):
     group.add(rock)
     rock.update()
     assert len(group) == 0
+
+
+# ---- black hole asteroid ----
+
+def test_blackhole_is_indestructible(game):
+    rock = Rock(500, 300, 16, 16, game, rock_type=BLACKHOLE)
+    hp_before = rock.hp
+    rock.take_damage(100)
+    assert rock.hp == hp_before
+
+
+def test_blackhole_has_gravity(game):
+    rock = Rock(500, 300, 16, 16, game, rock_type=BLACKHOLE)
+    assert rock.gravity_radius > 0
+    assert rock.gravity_strength > 0
+
+
+def test_blackhole_type_correct(game):
+    rock = Rock(500, 300, 16, 16, game, rock_type=BLACKHOLE)
+    assert rock.rock_type == BLACKHOLE
+
+
+def test_blackhole_has_mask(game):
+    rock = Rock(500, 300, 16, 16, game, rock_type=BLACKHOLE)
+    assert rock.mask is not None
+    assert rock.mask.count() > 0
+
+
+def test_blackhole_moves(game):
+    rock = Rock(500, 300, 16, 16, game, rock_type=BLACKHOLE, dx=-1)
+    cx = rock.rect.centerx
+    rock.update()
+    assert rock.rect.centerx < cx
+
+
+def test_blackhole_grows_on_feed(game):
+    rock = Rock(500, 300, 16, 16, game, rock_type=BLACKHOLE)
+    cr_before = rock.core_radius
+    gr_before = rock.gravity_radius
+    gs_before = rock.gravity_strength
+    rock.feed(3.0)
+    assert rock.core_radius > cr_before
+    assert rock.gravity_radius > gr_before
+    assert rock.gravity_strength > gs_before
+
+
+def test_blackhole_growth_caps(game):
+    from objects.Rocks import BH_CORE_MAX, BH_GRAVITY_MAX, BH_STRENGTH_MAX
+    rock = Rock(500, 300, 16, 16, game, rock_type=BLACKHOLE)
+    rock.feed(100.0)
+    assert rock.core_radius <= BH_CORE_MAX
+    assert rock.gravity_radius <= BH_GRAVITY_MAX
+    assert rock.gravity_strength <= BH_STRENGTH_MAX
+
+
+def test_blackhole_consume_radius_grows(game):
+    rock = Rock(500, 300, 16, 16, game, rock_type=BLACKHOLE)
+    er_before = rock.consume_radius
+    rock.feed(5.0)
+    assert rock.consume_radius > er_before

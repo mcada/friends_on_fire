@@ -1,10 +1,12 @@
 import pytest
 from objects.Boss import (
-    Boss, BossProjectile, BOSS_BASE_HP,
+    Boss, BossProjectile, BossLaser, BOSS_BASE_HP,
     HIT_COOLDOWN, INVULN_PHASE_DURATION,
     PATROL_LEFT_RATIO, PATROL_RIGHT_RATIO, PATROL_SPEED,
+    LASER_CHARGE_DURATION, LASER_ACTIVE_DURATION,
+    LASER_MAX_CONCURRENT,
 )
-from states.game_world import Game_World, LEVEL_DURATION
+from states.game_world import Game_World, LEVEL_DURATION, BOSS_COUNTDOWN
 
 
 def _no_actions():
@@ -98,6 +100,124 @@ def test_laser_projectile_dimensions(game):
     assert bp.destroyable is False
 
 
+# ---- BossLaser (stream-based) ----
+
+def test_boss_laser_starts_charging(game):
+    boss = Boss(game, attack_level=2, hp_override=20)
+    boss.entering = False
+    laser = BossLaser(boss, 0, game)
+    assert laser.phase == "charging"
+    assert not laser.active
+    assert not laser.done
+
+
+def test_boss_laser_transitions_to_active(game):
+    boss = Boss(game, attack_level=2, hp_override=20)
+    boss.entering = False
+    boss.rect.x = 600
+    laser = BossLaser(boss, 0, game)
+    laser.update(LASER_CHARGE_DURATION + 0.01)
+    assert laser.phase == "active"
+    assert laser.active
+
+
+def test_boss_laser_emits_segments_when_active(game):
+    boss = Boss(game, attack_level=2, hp_override=20)
+    boss.entering = False
+    boss.rect.x = 600
+    laser = BossLaser(boss, 0, game)
+    assert len(laser.segments) == 0
+    laser.update(LASER_CHARGE_DURATION + 0.01)
+    laser.update(0.1)
+    assert len(laser.segments) > 0
+
+
+def test_boss_laser_segments_move_left(game):
+    boss = Boss(game, attack_level=2, hp_override=20)
+    boss.entering = False
+    boss.rect.x = 600
+    laser = BossLaser(boss, 0, game)
+    laser.update(LASER_CHARGE_DURATION + 0.01)
+    laser.update(0.05)
+    first_x = laser.segments[0][0]
+    laser.update(0.05)
+    assert laser.segments[0][0] < first_x
+
+
+def test_boss_laser_fades_after_active(game):
+    boss = Boss(game, attack_level=2, hp_override=20)
+    boss.entering = False
+    boss.rect.x = 600
+    laser = BossLaser(boss, 0, game)
+    laser.update(LASER_CHARGE_DURATION + 0.01)
+    laser.update(LASER_ACTIVE_DURATION + 0.01)
+    assert laser.phase == "fading"
+    assert laser.active
+
+
+def test_boss_laser_done_when_segments_gone(game):
+    boss = Boss(game, attack_level=2, hp_override=20)
+    boss.entering = False
+    boss.rect.x = 600
+    laser = BossLaser(boss, 0, game)
+    laser.update(LASER_CHARGE_DURATION + 0.01)
+    laser.update(LASER_ACTIVE_DURATION + 0.01)
+    for _ in range(300):
+        laser.update(0.05)
+    assert laser.done
+
+
+def test_boss_laser_sweep_creates_one_or_two(game):
+    boss = Boss(game, attack_level=2, hp_override=20)
+    boss.entering = False
+    boss._attack_laser_sweep()
+    assert 1 <= len(boss.boss_lasers) <= 2
+
+
+def test_boss_laser_cross_creates_one_or_two(game):
+    boss = Boss(game, attack_level=2, hp_override=20)
+    boss.entering = False
+    boss._attack_laser_cross()
+    assert 1 <= len(boss.boss_lasers) <= 2
+
+
+def test_boss_laser_max_concurrent(game):
+    boss = Boss(game, attack_level=2, hp_override=20)
+    boss.entering = False
+    boss._attack_laser_sweep()
+    boss._attack_laser_sweep()
+    assert len(boss.boss_lasers) <= LASER_MAX_CONCURRENT
+
+
+def test_boss_laser_sweep_offsets_have_gaps(game):
+    boss = Boss(game, attack_level=2, hp_override=20)
+    boss.entering = False
+    boss._attack_laser_sweep()
+    offsets = sorted(l.offset_y for l in boss.boss_lasers)
+    from objects.Boss import LASER_BEAM_RADIUS
+    for i in range(len(offsets) - 1):
+        gap = offsets[i + 1] - offsets[i] - LASER_BEAM_RADIUS * 2
+        assert gap >= 35, f"Gap {gap}px too small for player (35px)"
+
+
+def test_boss_lasers_cleaned_after_lifecycle(game):
+    boss = Boss(game, attack_level=2, hp_override=20)
+    boss.entering = False
+    boss.rect.x = 600
+    boss.base_y = float(boss.rect.centery)
+    boss.attack_timer = 9999
+    boss._attack_laser_sweep()
+    assert len(boss.boss_lasers) >= 1
+    boss.update(LASER_CHARGE_DURATION + 0.01)
+    boss.attack_timer = 9999
+    boss.update(LASER_ACTIVE_DURATION + 0.01)
+    boss.attack_timer = 9999
+    for _ in range(300):
+        boss.update(0.05)
+        boss.attack_timer = 9999
+    assert len(boss.boss_lasers) == 0
+
+
 # ---- Boss movement ----
 
 def test_boss_patrols_left_and_right(game):
@@ -161,20 +281,26 @@ def test_attack_pool_methods_exist(game):
 
 # ---- Boss spawning in game_world ----
 
-def test_boss_spawns_in_level_at_duration(game):
-    gw = _enter_gw(game, mode="level", level_num=1)
+def _trigger_boss(gw):
+    """Trigger boss spawn and advance past the countdown."""
     actions = _no_actions()
     gw.elapsed_time = LEVEL_DURATION - 0.1
     gw.update(0.2, actions)
+    assert gw.boss_phase is True
+    if gw.boss is None:
+        gw.update(BOSS_COUNTDOWN + 0.1, actions)
+
+
+def test_boss_spawns_in_level_at_duration(game):
+    gw = _enter_gw(game, mode="level", level_num=1)
+    _trigger_boss(gw)
     assert gw.boss is not None
     assert gw.boss_phase is True
 
 
 def test_boss_spawns_in_endless_at_interval(game):
     gw = _enter_gw(game, mode="endless")
-    actions = _no_actions()
-    gw.elapsed_time = LEVEL_DURATION - 0.1
-    gw.update(0.2, actions)
+    _trigger_boss(gw)
     assert gw.boss is not None
     assert gw.boss_phase is True
 
@@ -191,10 +317,9 @@ def test_boss_attack_level_matches_game_level(game):
 
 def test_level_won_on_boss_defeat(game):
     gw = _enter_gw(game, mode="level", level_num=1)
-    actions = _no_actions()
-    gw.elapsed_time = LEVEL_DURATION + 1
-    gw.update(0.01, actions)
+    _trigger_boss(gw)
     assert gw.boss is not None
+    actions = _no_actions()
     gw.boss.hp = 0
     gw.boss.alive_flag = False
     gw.update(0.01, actions)
@@ -203,10 +328,9 @@ def test_level_won_on_boss_defeat(game):
 
 def test_endless_continues_after_boss(game):
     gw = _enter_gw(game, mode="endless")
-    actions = _no_actions()
-    gw.elapsed_time = LEVEL_DURATION + 1
-    gw.update(0.01, actions)
+    _trigger_boss(gw)
     assert gw.boss is not None
+    actions = _no_actions()
     gw.boss.hp = 0
     gw.boss.alive_flag = False
     gw.update(0.01, actions)
