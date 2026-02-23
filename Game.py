@@ -185,6 +185,9 @@ class Game:
             gw = self.active_game_world
             if gw and gw.boss and gw.boss.alive_flag:
                 gw.boss.draw(self.game_canvas)
+            if gw:
+                for p in gw.particles:
+                    p.draw(self.game_canvas)
 
         pygame.display.flip()
 
@@ -329,7 +332,7 @@ class Game:
             if self.explosion_sounds:
                 random.choice(self.explosion_sounds).play()
             return
-        if name in self.weapon_sounds:
+        if self.weapon_sounds.get(name):
             random.choice(self.weapon_sounds[name]).play()
             return
         sound = self.sounds.get(name)

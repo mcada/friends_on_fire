@@ -758,6 +758,7 @@ class Game_World(State):
         from objects.Player import HIT_INVULN_DURATION, DAMAGE_INDICATOR_DURATION
         if player.has_shield:
             player.has_shield = False
+            player.hit_invuln = HIT_INVULN_DURATION
             player.shield_flash = 30
             player.damage_indicator = DAMAGE_INDICATOR_DURATION
             self.upgrade_msg = "Shield broken!"
@@ -1125,7 +1126,20 @@ class Game_World(State):
         display.blit(shadow, (tx + 1, ty + 1))
         display.blit(txt, (tx, ty))
 
+    _symbol_cache = {}
+
     def _draw_weapon_symbol(self, surface, weapon, sz):
+        key = (weapon.__class__.__name__, sz)
+        cached = self._symbol_cache.get(key)
+        if cached is not None:
+            surface.blit(cached, (0, 0))
+            return
+        sym = pygame.Surface((sz, sz), pygame.SRCALPHA)
+        self._render_weapon_symbol(sym, weapon, sz)
+        self._symbol_cache[key] = sym
+        surface.blit(sym, (0, 0))
+
+    def _render_weapon_symbol(self, surface, weapon, sz):
         from objects.Weapon import StraightCannon, SpreadShot, LaserCannon, HomingMissile
         color = pygame.Color(weapon.color)
         bright = (min(255, color.r + 100), min(255, color.g + 100),
@@ -1189,30 +1203,30 @@ class Game_World(State):
                              (tcx, tcy - cr - 1), (tcx, tcy + cr + 1), 1)
 
     HEART_SIZE = 13
+    _heart_cache = {}
 
-    @staticmethod
-    def _draw_heart(surface, x, y, size, filled=True):
+    @classmethod
+    def _get_heart(cls, size, filled):
+        key = (size, filled)
+        if key in cls._heart_cache:
+            return cls._heart_cache[key]
         s = size
         r = s // 4
         heart = pygame.Surface((s, s), pygame.SRCALPHA)
         hcx = s // 2
-
         if filled:
             color = (220, 40, 40)
             highlight = (255, 130, 130)
         else:
             color = (55, 55, 60)
             highlight = None
-
         pygame.draw.circle(heart, color, (hcx - r + 1, r + 2), r)
         pygame.draw.circle(heart, color, (hcx + r - 1, r + 2), r)
         pygame.draw.polygon(heart, color, [
             (1, r + 2), (s - 1, r + 2), (hcx, s - 2)
         ])
-
         if highlight:
             pygame.draw.circle(heart, highlight, (hcx - r, r), r // 2)
-
         if not filled:
             outline = pygame.Surface((s, s), pygame.SRCALPHA)
             mask = pygame.mask.from_surface(heart)
@@ -1220,8 +1234,12 @@ class Game_World(State):
             if len(outline_pts) > 2:
                 pygame.draw.lines(outline, (90, 90, 95), True, outline_pts, 1)
             heart = outline
+        cls._heart_cache[key] = heart
+        return heart
 
-        surface.blit(heart, (x, y))
+    @staticmethod
+    def _draw_heart(surface, x, y, size, filled=True):
+        surface.blit(Game_World._get_heart(size, filled), (x, y))
 
     def _draw_lives_and_shield(self, display, x, y, player):
         row_h = self.ICON_SIZE
@@ -1410,9 +1428,6 @@ class Game_World(State):
 
     def render(self, display):
         display.blit(self.background, (0, 0))
-
-        for p in self.particles:
-            p.draw(display)
 
         if self.boss_phase and self.boss_countdown > 0:
             secs = max(1, int(math.ceil(self.boss_countdown)))
